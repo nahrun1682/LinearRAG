@@ -1,0 +1,2103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinearRAG 論文ガイド</title>
+  <style>
+    :root {
+      --bg: #f3efe7;
+      --paper: #fffdf8;
+      --ink: #18222c;
+      --muted: #5f6b73;
+      --line: #d7d1c6;
+      --accent: #0f766e;
+      --accent-2: #d97706;
+      --accent-3: #b91c1c;
+      --accent-4: #1d4ed8;
+      --soft-1: #dff4ef;
+      --soft-2: #fff0d9;
+      --soft-3: #fde5e5;
+      --soft-4: #e4edff;
+      --shadow: 0 18px 40px rgba(24, 34, 44, 0.09);
+      --radius: 22px;
+      --content: 1120px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+      line-height: 1.7;
+      background:
+        radial-gradient(circle at top left, #fff8eb 0, rgba(255,248,235,0.2) 28%, transparent 48%),
+        linear-gradient(180deg, #efe8dc 0%, #f6f1e8 18%, #f3efe7 100%);
+    }
+
+    a {
+      color: var(--accent-4);
+    }
+
+    .page {
+      width: min(var(--content), calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 24px 0 72px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 40px;
+      border: 1px solid rgba(24, 34, 44, 0.08);
+      border-radius: 30px;
+      background:
+        linear-gradient(140deg, rgba(15,118,110,0.1), rgba(29,78,216,0.06) 45%, rgba(217,119,6,0.09)),
+        var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -60px -60px auto;
+      width: 240px;
+      height: 240px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(217,119,6,0.16), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(24, 34, 44, 0.06);
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.04em;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 16px;
+      font-size: clamp(34px, 5vw, 62px);
+      letter-spacing: -0.03em;
+    }
+
+    .hero-lead {
+      max-width: 760px;
+      margin-top: 16px;
+      font-size: 18px;
+      color: #2e3a43;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.9fr;
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .hero-card, .card, .metric, .mini-card, .diagram-box, .section {
+      border: 1px solid rgba(24, 34, 44, 0.08);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,0.88);
+      box-shadow: 0 10px 24px rgba(24, 34, 44, 0.05);
+    }
+
+    .hero-card {
+      padding: 22px;
+    }
+
+    .hero-card h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .hero-list {
+      margin: 0;
+      padding-left: 20px;
+      color: #31404a;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .chip.teal { background: var(--soft-1); color: var(--accent); }
+    .chip.orange { background: var(--soft-2); color: var(--accent-2); }
+    .chip.red { background: var(--soft-3); color: var(--accent-3); }
+    .chip.blue { background: var(--soft-4); color: var(--accent-4); }
+    .chip.paper { background: var(--soft-2); color: #82500b; }
+    .chip.codebase { background: var(--soft-4); color: var(--accent-4); }
+    .chip.both { background: var(--soft-1); color: var(--accent); }
+
+    .toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 22px 0 8px;
+    }
+
+    .toc a {
+      text-decoration: none;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid rgba(24, 34, 44, 0.08);
+      border-radius: 999px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .section {
+      margin-top: 24px;
+      padding: 28px;
+      background: rgba(255,253,248,0.96);
+    }
+
+    .section h2 {
+      font-size: clamp(24px, 3vw, 36px);
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .section-intro {
+      color: var(--muted);
+      margin-top: 0;
+      margin-bottom: 18px;
+      max-width: 840px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .card h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .card p {
+      margin: 0;
+      color: #33414b;
+    }
+
+    .problem-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .mini-card {
+      padding: 16px 18px;
+    }
+
+    .mini-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    .mini-card.bad {
+      background: linear-gradient(180deg, #fff3f2, #fffaf8);
+      border-color: rgba(185,28,28,0.16);
+    }
+
+    .mini-card.good {
+      background: linear-gradient(180deg, #ecfbf8, #f8fffd);
+      border-color: rgba(15,118,110,0.16);
+    }
+
+    .visual-flow {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      position: relative;
+      padding: 18px;
+      border-radius: 20px;
+      background: #fff;
+      border: 1px solid rgba(24,34,44,0.08);
+    }
+
+    .flow-step::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -12px;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .flow-step .num {
+      display: inline-flex;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      background: var(--soft-4);
+      color: var(--accent-4);
+    }
+
+    .flow-step h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .flow-step p {
+      margin: 0;
+      color: #34424b;
+      font-size: 15px;
+    }
+
+    .tri-graph {
+      padding: 22px;
+    }
+
+    .tri-graph-stage {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .node-col {
+      display: grid;
+      gap: 10px;
+    }
+
+    .node {
+      padding: 14px 12px;
+      border-radius: 18px;
+      text-align: center;
+      font-weight: 700;
+      border: 1px solid rgba(24,34,44,0.08);
+      background: #fff;
+    }
+
+    .node.entity { background: var(--soft-1); color: var(--accent); }
+    .node.sentence { background: var(--soft-2); color: #8a4b05; }
+    .node.passage { background: var(--soft-4); color: var(--accent-4); }
+
+    .link-col {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .arrow {
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .metric {
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(247,249,250,0.95));
+    }
+
+    .metric .label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .metric .value {
+      display: block;
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 800;
+      line-height: 1.05;
+    }
+
+    .metric .sub {
+      display: block;
+      margin-top: 8px;
+      color: #42515b;
+      font-size: 14px;
+    }
+
+    figure {
+      margin: 0;
+    }
+
+    .img-card {
+      overflow: hidden;
+      border-radius: 24px;
+      border: 1px solid rgba(24,34,44,0.08);
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(24,34,44,0.05);
+    }
+
+    .img-card img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .img-card figcaption {
+      padding: 14px 18px 18px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .table-like {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .cell {
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(24,34,44,0.08);
+      background: #fff;
+      font-size: 14px;
+    }
+
+    .row.header .cell {
+      background: rgba(24,34,44,0.05);
+      font-weight: 700;
+    }
+
+    .cell.best {
+      background: linear-gradient(180deg, #ecfbf8, #f9fffd);
+      border-color: rgba(15,118,110,0.18);
+      font-weight: 700;
+    }
+
+    .cell.badge {
+      font-weight: 700;
+    }
+
+    .quote-box {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--accent-2);
+      border-radius: 0 18px 18px 0;
+      background: #fff9ef;
+      color: #50381f;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    code {
+      padding: 0.12em 0.38em;
+      border-radius: 6px;
+      background: #edf1f3;
+      color: #17324a;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+    }
+
+    .source-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: #17232d;
+      color: #f7fafc;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: 0.01em;
+    }
+
+    .architecture {
+      position: relative;
+      display: grid;
+      grid-template-columns: 0.8fr 1.35fr 1fr;
+      gap: 16px;
+      padding: 24px;
+      overflow: hidden;
+      border-radius: 26px;
+      background:
+        linear-gradient(120deg, rgba(15,118,110,0.09), transparent 38%),
+        linear-gradient(300deg, rgba(29,78,216,0.08), transparent 40%),
+        #f9faf8;
+      border: 1px solid rgba(24,34,44,0.1);
+    }
+
+    .arch-column {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .arch-column > h3 {
+      padding-bottom: 10px;
+      border-bottom: 2px solid rgba(24,34,44,0.1);
+      font-size: 15px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .arch-box {
+      position: relative;
+      padding: 15px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.96);
+      border: 1px solid rgba(24,34,44,0.1);
+      box-shadow: 0 8px 20px rgba(24,34,44,0.05);
+    }
+
+    .arch-box strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+
+    .arch-box small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .arch-box.input { border-left: 4px solid var(--accent-2); }
+    .arch-box.process { border-left: 4px solid var(--accent); }
+    .arch-box.store { border-left: 4px solid var(--accent-4); }
+    .arch-box.output { border-left: 4px solid var(--accent-3); }
+
+    .arch-arrow {
+      text-align: center;
+      color: var(--muted);
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .artifact-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .artifact {
+      padding: 16px;
+      border-radius: 18px;
+      background: #f8fbff;
+      border: 1px solid rgba(29,78,216,0.13);
+    }
+
+    .artifact strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent-4);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .artifact span {
+      color: #3d4a54;
+      font-size: 13px;
+    }
+
+    .sequence {
+      display: grid;
+      gap: 0;
+      padding: 8px 0;
+    }
+
+    .sequence-row {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 14px;
+      min-height: 92px;
+    }
+
+    .sequence-rail {
+      position: relative;
+      display: flex;
+      justify-content: center;
+    }
+
+    .sequence-rail::after {
+      content: "";
+      position: absolute;
+      top: 35px;
+      bottom: -8px;
+      width: 2px;
+      background: linear-gradient(var(--accent), var(--accent-4));
+    }
+
+    .sequence-row:last-child .sequence-rail::after {
+      display: none;
+    }
+
+    .sequence-dot {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border-radius: 50%;
+      background: #17232d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      box-shadow: 0 0 0 6px #f7f4ec;
+    }
+
+    .sequence-content {
+      padding: 5px 0 24px;
+    }
+
+    .sequence-content h3 {
+      margin-bottom: 5px;
+      font-size: 17px;
+    }
+
+    .sequence-content p {
+      margin: 0;
+      color: #40505a;
+      font-size: 14px;
+    }
+
+    .hop-board {
+      padding: 22px;
+      overflow-x: auto;
+      border-radius: 24px;
+      background: #13212b;
+      color: #edf7f5;
+    }
+
+    .hop-track {
+      display: grid;
+      grid-template-columns: 1fr 58px 1fr 58px 1fr 58px 1fr;
+      min-width: 820px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hop-node {
+      min-height: 132px;
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.13);
+      background: rgba(255,255,255,0.07);
+    }
+
+    .hop-node .kind {
+      display: block;
+      margin-bottom: 8px;
+      color: #91c9c2;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .hop-node strong {
+      display: block;
+      margin-bottom: 7px;
+      color: #fff;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .hop-node small {
+      color: #b8c8cf;
+      line-height: 1.5;
+    }
+
+    .hop-edge {
+      text-align: center;
+      color: #e7b66b;
+      font-weight: 800;
+    }
+
+    .formula {
+      padding: 18px;
+      overflow-x: auto;
+      border-radius: 18px;
+      background: #17232d;
+      color: #eaf3f5;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .formula .dim { color: #93a6af; }
+    .formula .teal-text { color: #73d3c6; }
+    .formula .orange-text { color: #ffc36d; }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .compare-card {
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid rgba(24,34,44,0.09);
+      background: #fff;
+    }
+
+    .compare-card.recommended {
+      background: linear-gradient(160deg, #edfaf7, #fff);
+      border-color: rgba(15,118,110,0.2);
+    }
+
+    .compare-card h3 {
+      margin-bottom: 8px;
+      font-size: 18px;
+    }
+
+    .compare-card ul {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: #3d4b55;
+      font-size: 14px;
+    }
+
+    .callout {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 18px;
+      background: #fff7e8;
+      border: 1px solid rgba(217,119,6,0.2);
+    }
+
+    .callout-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--accent-2);
+      color: #fff;
+      font-weight: 900;
+    }
+
+    .callout p {
+      margin: 0;
+      color: #5a4021;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+    }
+
+    .legend span {
+      padding: 6px 10px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .legend .paper { background: var(--soft-2); color: #82500b; }
+    .legend .codebase { background: var(--soft-4); color: var(--accent-4); }
+    .legend .both { background: var(--soft-1); color: var(--accent); }
+
+    .example-corpus {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .passage-card {
+      position: relative;
+      padding: 20px;
+      border-radius: 20px;
+      background: #fff;
+      border: 1px solid rgba(24,34,44,0.1);
+      box-shadow: 0 10px 24px rgba(24,34,44,0.05);
+    }
+
+    .passage-card::before {
+      content: attr(data-passage);
+      position: absolute;
+      top: -10px;
+      left: 16px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-4);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    .passage-card p {
+      margin: 5px 0 0;
+      color: #34434d;
+      font-size: 15px;
+    }
+
+    .entity-mark {
+      padding: 1px 4px;
+      border-radius: 5px;
+      background: var(--soft-1);
+      color: var(--accent);
+      font-weight: 800;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    .entity-mark.bridge {
+      background: var(--soft-2);
+      color: #8a4b05;
+    }
+
+    .entity-mark.answer {
+      background: var(--soft-3);
+      color: var(--accent-3);
+    }
+
+    .transform-arrow {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 14px;
+      align-items: center;
+      margin: 18px 0;
+    }
+
+    .transform-arrow::before,
+    .transform-arrow::after {
+      content: "";
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(24,34,44,0.28), transparent);
+    }
+
+    .transform-arrow span {
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #17232d;
+      color: #fff;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .extraction-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .extract-panel {
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(24,34,44,0.09);
+      background: #f9faf8;
+    }
+
+    .extract-panel h3 {
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+
+    .mapping-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .mapping-row {
+      display: grid;
+      grid-template-columns: minmax(90px, 0.8fr) auto minmax(0, 1.4fr);
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid rgba(24,34,44,0.07);
+      font-size: 13px;
+    }
+
+    .mapping-row .map-key {
+      font-weight: 800;
+      color: var(--accent-4);
+    }
+
+    .mapping-row .map-arrow {
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .mapping-row .map-values {
+      color: #3c4a54;
+    }
+
+    .graph-canvas {
+      position: relative;
+      min-height: 510px;
+      margin-top: 18px;
+      overflow: hidden;
+      border-radius: 26px;
+      border: 1px solid rgba(24,34,44,0.12);
+      background:
+        linear-gradient(rgba(255,255,255,0.84), rgba(255,255,255,0.84)),
+        repeating-linear-gradient(0deg, transparent 0 29px, rgba(29,78,216,0.08) 30px),
+        repeating-linear-gradient(90deg, transparent 0 29px, rgba(29,78,216,0.08) 30px),
+        #f5f8fb;
+    }
+
+    .graph-label {
+      position: absolute;
+      z-index: 3;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: rgba(23,35,45,0.9);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    .graph-node {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      min-width: 120px;
+      min-height: 58px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: 0 9px 20px rgba(24,34,44,0.12);
+    }
+
+    .graph-node.p {
+      border: 2px solid #84a8e8;
+      background: #eaf1ff;
+      color: #173f91;
+    }
+
+    .graph-node.e {
+      border: 2px solid #6bc2b6;
+      background: #e4f8f4;
+      color: #075e57;
+      border-radius: 999px;
+    }
+
+    .graph-node.s {
+      min-width: 150px;
+      border: 2px dashed #e8aa54;
+      background: #fff3df;
+      color: #784307;
+    }
+
+    .graph-line {
+      position: absolute;
+      z-index: 1;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(59,87,104,0.45);
+      transform-origin: left center;
+    }
+
+    .graph-line.semantic {
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 10px rgba(15,118,110,0.26);
+    }
+
+    .activation-steps {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .activation-step {
+      position: relative;
+      padding: 18px;
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid rgba(24,34,44,0.09);
+    }
+
+    .activation-step::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -13px;
+      z-index: 2;
+      color: var(--accent-2);
+      font-size: 22px;
+      font-weight: 900;
+      transform: translateY(-50%);
+    }
+
+    .activation-step:last-child::after {
+      display: none;
+    }
+
+    .activation-step .step-label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .activation-step strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 15px;
+    }
+
+    .activation-step p {
+      margin: 0;
+      color: #44525b;
+      font-size: 13px;
+    }
+
+    .score-meter {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 44px;
+      gap: 10px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .score-row strong {
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    .score-track {
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e8ecee;
+    }
+
+    .score-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent-4), var(--accent));
+    }
+
+    .prompt-box {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .prompt-input,
+    .prompt-output {
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid rgba(24,34,44,0.1);
+    }
+
+    .prompt-input {
+      background: #17232d;
+      color: #e8f0f3;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .prompt-input .prompt-muted {
+      color: #8fa2ac;
+    }
+
+    .prompt-output {
+      display: grid;
+      align-content: center;
+      background: linear-gradient(145deg, #edfaf7, #fff);
+      border-color: rgba(15,118,110,0.2);
+    }
+
+    .prompt-output strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-size: 19px;
+    }
+
+    .prompt-output p {
+      margin: 0;
+      color: #32434a;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .grid-2,
+      .grid-3,
+      .visual-flow,
+      .metric-grid,
+      .architecture,
+      .artifact-grid,
+      .compare-grid,
+      .example-corpus,
+      .extraction-board,
+      .activation-steps,
+      .prompt-box {
+        grid-template-columns: 1fr;
+      }
+
+      .tri-graph-stage {
+        grid-template-columns: 1fr;
+      }
+
+      .link-col {
+        grid-auto-flow: column;
+        justify-content: start;
+      }
+
+      .arrow {
+        transform: rotate(90deg);
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-step::after {
+        content: "↓";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -16px;
+        transform: translateX(-50%);
+      }
+
+      .activation-step::after {
+        content: "↓";
+        top: auto;
+        right: auto;
+        bottom: -19px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .graph-canvas {
+        min-width: 820px;
+      }
+
+      .graph-scroll {
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <span class="eyebrow">論文ビジュアルガイド / 初学者向け</span>
+      <h1>LinearRAG を<br>ひと目で理解する</h1>
+      <p class="hero-lead">
+        このページは、<strong>「なぜ GraphRAG がうまくいかないことがあるのか」</strong>、
+        そして <strong>LinearRAG が何を捨てて、何を残したのか</strong> を、
+        図解中心でつかむための日本語ガイドです。
+      </p>
+
+      <div class="chips">
+        <span class="chip red">問題: Relation extraction が重くて壊れやすい</span>
+        <span class="chip teal">解法: Relation-free Tri-Graph</span>
+        <span class="chip blue">検索: 2 段階 retrieval</span>
+        <span class="chip orange">利点: 高速・低コスト・高精度</span>
+      </div>
+
+      <div class="hero-grid">
+        <div class="hero-card">
+          <h3>この論文のひと言要約</h3>
+          <p>
+            GraphRAG の強みは残しつつ、<strong>明示的な関係抽出だけをやめる</strong>。
+            その代わりに、<strong>エンティティ・文・パッセージ</strong> をつなぐ軽量グラフを作り、
+            意味伝播と PageRank で multi-hop 検索を実現する。
+          </p>
+        </div>
+        <div class="hero-card">
+          <h3>このページで分かること</h3>
+          <ul class="hero-list">
+            <li>従来 GraphRAG のどこが不安定なのか</li>
+            <li>LinearRAG の構造と検索フロー</li>
+            <li>性能・効率で何が改善したのか</li>
+            <li>どういう用途に向いているのか</li>
+          </ul>
+        </div>
+      </div>
+
+      <nav class="toc">
+        <a href="#problem">1. まず問題</a>
+        <a href="#idea">2. コアアイデア</a>
+        <a href="#implementation">3. 実装設計</a>
+        <a href="#walkthrough">4. 構築/RAG具体例</a>
+        <a href="#pipeline">5. 検索フロー</a>
+        <a href="#example">6. Multi-hop</a>
+        <a href="#results">7. 結果</a>
+        <a href="#limits">8. 制約</a>
+        <a href="#takeaway">9. 使いどころ</a>
+      </nav>
+    </header>
+
+    <section id="problem" class="section">
+      <h2>1. まず何が問題だったのか</h2>
+      <p class="section-intro">
+        論文の出発点は、<strong>GraphRAG は理屈の上では強そうなのに、実際には naive RAG を下回ることがある</strong>という観察です。
+        著者たちは原因を「relation extraction ベースのグラフ構築」に絞って分析しています。
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>従来 GraphRAG の期待</h3>
+          <p>
+            文書をグラフ化すると、離れた文書同士のつながりをたどれるため、
+            複雑な質問でも必要な証拠を拾いやすくなるはずです。
+          </p>
+        </div>
+        <div class="card">
+          <h3>実際に起きること</h3>
+          <p>
+            つながりを増やした分だけ、<strong>誤った関係や整合しない関係</strong>も増えます。
+            その結果、recall は上がっても relevance が落ち、回答生成が不安定になります。
+          </p>
+        </div>
+      </div>
+
+      <div class="problem-stack" style="margin-top:18px;">
+        <div class="mini-card bad">
+          <strong>局所的不正確性</strong>
+          単文からの relation extraction が否定やニュアンスを落とし、事実と異なる三つ組を生成する。
+        </div>
+        <div class="mini-card bad">
+          <strong>大域的不整合性</strong>
+          passage ごとに別々に抽出した関係が、コーパス全体で見ると矛盾・重複・構造崩れを起こす。
+        </div>
+        <div class="mini-card good">
+          <strong>論文の発想転換</strong>
+          「関係を正しく抽出する」のではなく、<strong>関係を無理に抽出しない</strong>方向へ設計を切り替える。
+        </div>
+      </div>
+
+      <div class="quote-box">
+        重要なのは「情報をつなぐアンカーは relation ではなく entity で十分ではないか」という発想です。
+        関係の意味は三つ組より原文パッセージのほうが自然に保持できます。
+      </div>
+    </section>
+
+    <section id="idea" class="section">
+      <h2>2. LinearRAG のコアアイデア</h2>
+      <p class="section-intro">
+        LinearRAG は、<strong>relation graph</strong> を作らず、
+        <strong>entity / sentence / passage の 3 層だけで knowledge structure を作る</strong>のが最大の特徴です。
+      </p>
+
+      <div class="tri-graph card">
+        <h3>Tri-Graph のイメージ</h3>
+        <div class="tri-graph-stage">
+          <div class="node-col">
+            <div class="node sentence">Sentence A</div>
+            <div class="node sentence">Sentence B</div>
+            <div class="node sentence">Sentence C</div>
+          </div>
+          <div class="link-col">
+            <div class="arrow">↔</div>
+            <div>mention</div>
+          </div>
+          <div class="node-col">
+            <div class="node entity">Entity X</div>
+            <div class="node entity">Entity Y</div>
+            <div class="node entity">Entity Z</div>
+          </div>
+          <div class="link-col">
+            <div class="arrow">↔</div>
+            <div>contain</div>
+          </div>
+          <div class="node-col">
+            <div class="node passage">Passage 1</div>
+            <div class="node passage">Passage 2</div>
+            <div class="node passage">Passage 3</div>
+          </div>
+        </div>
+        <p class="footer-note">
+          ポイントは、entity 同士を relation label で直接結ばないことです。
+          構造は軽く保ち、意味の本体は元のテキストに残します。
+        </p>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px;">
+        <div class="card">
+          <h3>捨てたもの</h3>
+          <p>OpenIE 的な relation extraction、relation label の品質管理、複雑な関係スキーマ。</p>
+        </div>
+        <div class="card">
+          <h3>残したもの</h3>
+          <p>entity の整合、文脈の近さ、元の passage の意味情報、graph-based retrieval の広がり。</p>
+        </div>
+        <div class="card">
+          <h3>得たもの</h3>
+          <p>線形スケーラビリティ、LLM トークン消費ゼロの indexing、ノイズに強い multi-hop 検索。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="implementation" class="section">
+      <h2>3. ソースコードで見る実装設計</h2>
+      <p class="section-intro">
+        ここからは論文の概念を、このリポジトリで実際に動くクラスとデータに対応づけます。
+        色分けは <strong>橙=入力</strong>、<strong>緑=処理</strong>、<strong>青=永続化・索引</strong>、
+        <strong>赤=最終出力</strong>です。
+      </p>
+
+      <div class="architecture">
+        <div class="arch-column">
+          <h3>Input / entry point</h3>
+          <div class="arch-box input">
+            <strong>dataset/*/chunks.json</strong>
+            <small>原文チャンク。<code>run.py</code> が先頭に連番を付けて passage 化。</small>
+          </div>
+          <div class="arch-arrow">↓</div>
+          <div class="arch-box input">
+            <strong>dataset/*/questions.json</strong>
+            <small>質問と正解。索引構築後に <code>qa()</code> へ渡される。</small>
+          </div>
+          <div class="arch-box process">
+            <strong>run.py / main()</strong>
+            <small>設定、モデル、データを組み立て、<code>index → qa → evaluate</code> を実行。</small>
+          </div>
+        </div>
+
+        <div class="arch-column">
+          <h3>LinearRAG core</h3>
+          <div class="arch-box process">
+            <strong>index(passages)</strong>
+            <small>passage埋め込み → NER → 文/エンティティ埋め込み → グラフ構築。</small>
+          </div>
+          <div class="arch-box process">
+            <strong>SpacyNER.batch_ner()</strong>
+            <small>各passageからentityを抽出し、entityが現れたsentenceも同時に記録。</small>
+          </div>
+          <div class="arch-box process">
+            <strong>retrieve(questions)</strong>
+            <small>seed entityを決定し、semantic bridging、passage scoring、PPRを順に実行。</small>
+          </div>
+          <div class="arch-box process">
+            <strong>qa(questions)</strong>
+            <small>上位passageをプロンプトに連結し、LLMから最終回答を得る。</small>
+          </div>
+        </div>
+
+        <div class="arch-column">
+          <h3>Stored artifacts / output</h3>
+          <div class="arch-box store">
+            <strong>3つのEmbeddingStore</strong>
+            <small>passage・sentence・entityを別々のParquetとして保存。</small>
+          </div>
+          <div class="arch-box store">
+            <strong>ner_results.json</strong>
+            <small>passage→entity、sentence→entity対応を再利用するキャッシュ。</small>
+          </div>
+          <div class="arch-box store">
+            <strong>LinearRAG.graphml</strong>
+            <small>igraphがPPRに使うentity-passageグラフ。隣接passage辺も含む。</small>
+          </div>
+          <div class="arch-box output">
+            <strong>predictions.json</strong>
+            <small>取得passage、スコア、生成回答を含む実行結果。</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="artifact-grid">
+        <div class="artifact">
+          <strong>passage_embedding.parquet</strong>
+          <span>Dense retrieval と passage 初期重みに使用。</span>
+        </div>
+        <div class="artifact">
+          <strong>sentence_embedding.parquet</strong>
+          <span>質問との類似度を測り、意味伝播の経路を選ぶ。</span>
+        </div>
+        <div class="artifact">
+          <strong>entity_embedding.parquet</strong>
+          <span>質問entityをコーパス内entityへ意味的に対応づける。</span>
+        </div>
+        <div class="artifact">
+          <strong>LinearRAG.graphml</strong>
+          <span>entityとpassageを辺重み付きで保持し、PPRを実行。</span>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:18px;">
+        <div class="card">
+          <span class="source-tag">src/ner.py</span>
+          <h3>NERは「ノード抽出」と「文脈保持」を同時に行う</h3>
+          <p>
+            <code>extract_entities_sentences()</code> は spaCy の <code>doc.ents</code> を走査し、
+            数値・序数を除外してentityを収集します。同時に <code>ent.sent.text</code> を保存するため、
+            relation labelなしでも「同じ文で何と何が語られたか」を検索時に利用できます。
+          </p>
+        </div>
+        <div class="card">
+          <span class="source-tag">src/embedding_store.py</span>
+          <h3>各テキストは内容ハッシュで差分追加される</h3>
+          <p>
+            <code>compute_mdhash_id()</code> で namespace付きMD5を作り、未登録テキストだけを埋め込みます。
+            既存Parquetを読み戻すため、同じコーパスの再実行で全件を再計算しない構成です。
+          </p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:18px;">
+        <div class="callout-mark">!</div>
+        <p>
+          論文ではTri-Graphを entity / sentence / passage の3種ノードとして説明します。
+          この実装では、<strong>sentenceは伝播用の対応表・疎行列として扱い、igraph本体にはentityとpassageを登録</strong>します。
+          概念は同じですが、PPR用グラフとsemantic bridging用構造を分離した実装です。
+        </p>
+      </div>
+    </section>
+
+    <section id="walkthrough" class="section">
+      <h2>4. 具体例で理解するグラフ構築とRAG</h2>
+      <p class="section-intro">
+        ここでは、架空の3つのpassageをLinearRAGへ登録し、
+        <strong>「アーク研究所を設立した人物が受賞した賞は？」</strong>という質問に答えるまでを追います。
+        答えは1つのpassageには書かれておらず、人物を橋にして2つのpassageをまたぐ必要があります。
+      </p>
+
+      <h3>Step 1: 原文をpassageとして受け取る</h3>
+      <div class="example-corpus">
+        <article class="passage-card" data-passage="PASSAGE 0">
+          <p>
+            <span class="entity-mark answer">アーク研究所</span>は、
+            量子材料を研究する独立機関である。
+            同研究所は<span class="entity-mark bridge">佐藤葵</span>によって設立された。
+          </p>
+        </article>
+        <article class="passage-card" data-passage="PASSAGE 1">
+          <p>
+            物理学者の<span class="entity-mark bridge">佐藤葵</span>は、
+            2024年に<span class="entity-mark answer">星雲科学賞</span>を受賞した。
+            受賞理由は量子材料の研究である。
+          </p>
+        </article>
+        <article class="passage-card" data-passage="PASSAGE 2">
+          <p>
+            <span class="entity-mark">星雲大学</span>は、
+            宇宙物理学と計算科学の教育で知られている。
+            研究所とは直接関係しない背景文書である。
+          </p>
+        </article>
+      </div>
+
+      <div class="quote-box">
+        Dense RAGでは「アーク研究所」に直接一致するPassage 0は見つけやすい一方、
+        質問に研究者名が書かれていないため、答えの「星雲科学賞」があるPassage 1を上位に置けるとは限りません。
+      </div>
+
+      <div class="transform-arrow"><span>index(passages)</span></div>
+
+      <h3>Step 2: spaCy NERでentityとsentenceを抽出する</h3>
+      <p class="section-intro">
+        <code>SpacyNER.batch_ner()</code> は、各passageに含まれるentityと、
+        entityが現れたsentenceを記録します。関係を「設立者」「受賞者」のようなラベルへ変換せず、原文をそのまま残す点が重要です。
+      </p>
+
+      <div class="extraction-board">
+        <div class="extract-panel">
+          <h3>passage → entities</h3>
+          <div class="mapping-list">
+            <div class="mapping-row">
+              <span class="map-key">Passage 0</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">アーク研究所 / 佐藤葵</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">Passage 1</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">佐藤葵 / 星雲科学賞</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">Passage 2</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">星雲大学</span>
+            </div>
+          </div>
+        </div>
+        <div class="extract-panel">
+          <h3>sentence → entities</h3>
+          <div class="mapping-list">
+            <div class="mapping-row">
+              <span class="map-key">Sentence A</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">アーク研究所</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">Sentence B</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">アーク研究所 / 佐藤葵</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">Sentence C</span>
+              <span class="map-arrow">→</span>
+              <span class="map-values">佐藤葵 / 星雲科学賞</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="transform-arrow"><span>extract_nodes_and_edges()</span></div>
+
+      <h3>Step 3: 「原文への索引」としてTri-Graphを組み立てる</h3>
+      <p class="section-intro">
+        青い四角がpassage、橙の破線四角がsentence、緑の丸がentityです。
+        <strong>佐藤葵</strong>がPassage 0とPassage 1をつなぐ橋になります。
+        LinearRAGは「佐藤葵 --設立した→ アーク研究所」というrelation edgeを作りません。
+      </p>
+
+      <div class="graph-scroll">
+        <div class="graph-canvas" aria-label="具体例から構築されたTri-Graph">
+          <span class="graph-label" style="left:34px; top:20px;">PASSAGES</span>
+          <span class="graph-label" style="left:326px; top:20px;">SENTENCES</span>
+          <span class="graph-label" style="left:654px; top:20px;">ENTITIES</span>
+
+          <div class="graph-node p" style="left:34px; top:82px;">Passage 0<br>研究所・設立者</div>
+          <div class="graph-node p" style="left:34px; top:230px;">Passage 1<br>人物・受賞</div>
+          <div class="graph-node p" style="left:34px; top:378px;">Passage 2<br>背景ノイズ</div>
+
+          <div class="graph-node s" style="left:300px; top:58px;">Sentence A<br>研究所の説明</div>
+          <div class="graph-node s" style="left:300px; top:152px;">Sentence B<br>佐藤葵が設立</div>
+          <div class="graph-node s" style="left:300px; top:260px;">Sentence C<br>佐藤葵が受賞</div>
+          <div class="graph-node s" style="left:300px; top:378px;">Sentence D<br>大学の説明</div>
+
+          <div class="graph-node e" style="left:630px; top:78px;">アーク研究所</div>
+          <div class="graph-node e" style="left:630px; top:205px;">佐藤葵</div>
+          <div class="graph-node e" style="left:630px; top:316px;">星雲科学賞</div>
+          <div class="graph-node e" style="left:630px; top:414px;">星雲大学</div>
+
+          <span class="graph-line" style="left:160px; top:111px; width:146px; transform:rotate(-8deg);"></span>
+          <span class="graph-line" style="left:160px; top:111px; width:161px; transform:rotate(28deg);"></span>
+          <span class="graph-line" style="left:160px; top:259px; width:147px; transform:rotate(12deg);"></span>
+          <span class="graph-line" style="left:160px; top:407px; width:142px; transform:rotate(0deg);"></span>
+
+          <span class="graph-line" style="left:450px; top:87px; width:185px; transform:rotate(7deg);"></span>
+          <span class="graph-line semantic" style="left:450px; top:181px; width:197px; transform:rotate(15deg);"></span>
+          <span class="graph-line semantic" style="left:450px; top:289px; width:190px; transform:rotate(-16deg);"></span>
+          <span class="graph-line" style="left:450px; top:289px; width:202px; transform:rotate(17deg);"></span>
+          <span class="graph-line" style="left:450px; top:407px; width:184px; transform:rotate(10deg);"></span>
+
+          <span class="graph-line semantic" style="left:160px; top:111px; width:500px; transform:rotate(15deg); opacity:0.32;"></span>
+          <span class="graph-line semantic" style="left:160px; top:259px; width:500px; transform:rotate(-4deg); opacity:0.32;"></span>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px;">
+        <div class="card">
+          <span class="source-tag">EmbeddingStore</span>
+          <h3>3種類を別々に埋め込む</h3>
+          <p>passageはdense検索、sentenceは橋の選択、entityは質問中の名前とコーパス中の名前の対応づけに使います。</p>
+        </div>
+        <div class="card">
+          <span class="source-tag">add_entity_to_passage_edges()</span>
+          <h3>出現頻度を辺重みにする</h3>
+          <p>entityがpassage内に何回現れたかを数え、そのpassage内の全entity出現数で正規化します。</p>
+        </div>
+        <div class="card">
+          <span class="source-tag">add_adjacent_passage_edges()</span>
+          <h3>隣接passageも接続する</h3>
+          <p>連番付きpassageでは前後関係も辺として追加し、元文書の局所的な連続性を保持します。</p>
+        </div>
+      </div>
+
+      <div class="transform-arrow"><span>retrieve(question)</span></div>
+
+      <h3>Step 4: 質問からseed entityを決める</h3>
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card">
+          <span class="source-tag">get_seed_entities()</span>
+          <h3>質問</h3>
+          <p><strong>「アーク研究所を設立した人物が受賞した賞は？」</strong></p>
+          <p style="margin-top:10px;">
+            質問NERは「アーク研究所」を抽出します。そのembeddingと最も近いコーパス内entityを探し、
+            <strong>アーク研究所</strong>を探索開始点にします。
+          </p>
+        </div>
+        <div class="card">
+          <h3>初期状態</h3>
+          <div class="score-meter">
+            <div class="score-row">
+              <strong>研究所</strong>
+              <div class="score-track"><div class="score-fill" style="width:96%;"></div></div>
+              <span>0.96</span>
+            </div>
+            <div class="score-row">
+              <strong>佐藤葵</strong>
+              <div class="score-track"><div class="score-fill" style="width:0%;"></div></div>
+              <span>0.00</span>
+            </div>
+            <div class="score-row">
+              <strong>科学賞</strong>
+              <div class="score-track"><div class="score-fill" style="width:0%;"></div></div>
+              <span>0.00</span>
+            </div>
+          </div>
+          <p class="footer-note">数値は仕組みを示すための例で、実測値ではありません。</p>
+        </div>
+      </div>
+
+      <h3 style="margin-top:24px;">Step 5: sentenceを橋にして必要なentityを活性化する</h3>
+      <div class="activation-steps">
+        <div class="activation-step">
+          <span class="step-label">Iteration 0</span>
+          <strong>アーク研究所</strong>
+          <p>質問に直接現れるseed。活性値 0.96 から開始。</p>
+        </div>
+        <div class="activation-step">
+          <span class="step-label">Sentence selection</span>
+          <strong>Sentence B</strong>
+          <p>「設立した人物」という質問意図に近いため、研究所の一般説明より高く評価。</p>
+        </div>
+        <div class="activation-step">
+          <span class="step-label">Iteration 1</span>
+          <strong>佐藤葵</strong>
+          <p>Sentence Bに共起するentityへ、seed score × sentence similarityを伝播。</p>
+        </div>
+        <div class="activation-step">
+          <span class="step-label">Iteration 2</span>
+          <strong>星雲科学賞</strong>
+          <p>佐藤葵を含み「受賞」に近いSentence Cを介して、答え候補まで到達。</p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:18px;">
+        <div class="callout-mark">δ</div>
+        <p>
+          各伝播スコアが <code>iteration_threshold</code> 未満なら、その先は探索しません。
+          また各entityから選ぶ文を <code>top_k_sentence</code> 件に制限するため、
+          「同じentityが出ただけ」の無関係な文へ際限なく広がるのを防ぎます。
+        </p>
+      </div>
+
+      <h3 style="margin-top:24px;">Step 6: PPRで「答えを支えるpassage」を順位付けする</h3>
+      <div class="grid-2" style="margin-top:14px;">
+        <div class="card">
+          <span class="source-tag">calculate_passage_scores()</span>
+          <h3>2つの信号を合成</h3>
+          <p>
+            質問とpassageのdense類似度に加え、活性化されたentityがpassage内に何回現れるかを加点します。
+            Passage 1は「佐藤葵」と「星雲科学賞」の両方から支持されます。
+          </p>
+          <div class="formula" style="margin-top:14px;">
+            reset(P1)<br>
+            = <span class="orange-text">dense similarity</span><br>
+            + <span class="teal-text">佐藤葵 bonus</span><br>
+            + <span class="teal-text">星雲科学賞 bonus</span>
+          </div>
+        </div>
+        <div class="card">
+          <span class="source-tag">run_ppr()</span>
+          <h3>最終passage順位の例</h3>
+          <div class="score-meter">
+            <div class="score-row">
+              <strong>Passage 1</strong>
+              <div class="score-track"><div class="score-fill" style="width:92%;"></div></div>
+              <span>1位</span>
+            </div>
+            <div class="score-row">
+              <strong>Passage 0</strong>
+              <div class="score-track"><div class="score-fill" style="width:78%;"></div></div>
+              <span>2位</span>
+            </div>
+            <div class="score-row">
+              <strong>Passage 2</strong>
+              <div class="score-track"><div class="score-fill" style="width:16%;"></div></div>
+              <span>3位</span>
+            </div>
+          </div>
+          <p class="footer-note">
+            順位とバーは説明用です。実際はigraphのPersonalized PageRankスコアで決まります。
+          </p>
+        </div>
+      </div>
+
+      <div class="transform-arrow"><span>qa() → LLM</span></div>
+
+      <h3>Step 7: 上位passageをLLMへ渡して回答を生成する</h3>
+      <div class="prompt-box">
+        <div class="prompt-input">
+          <span class="prompt-muted">[Retrieved Passage 1]</span><br>
+          物理学者の佐藤葵は、2024年に星雲科学賞を受賞した。<br><br>
+          <span class="prompt-muted">[Retrieved Passage 0]</span><br>
+          アーク研究所は佐藤葵によって設立された。<br><br>
+          <span class="prompt-muted">Question:</span><br>
+          アーク研究所を設立した人物が受賞した賞は？
+        </div>
+        <div class="prompt-output">
+          <strong>Answer: 星雲科学賞</strong>
+          <p>
+            LLMはPassage 0から「設立者=佐藤葵」を確認し、
+            Passage 1から「佐藤葵の受賞=星雲科学賞」を読み取ります。
+            グラフは答えそのものを生成せず、<strong>答えに必要な原文を揃える検索器</strong>として働きます。
+          </p>
+        </div>
+      </div>
+
+      <div class="quote-box">
+        この例の本質は、グラフ構築時に「設立した」「受賞した」というrelationを正規化して保存しなくても、
+        entityをアンカーに関連sentenceを選び、最終的な関係解釈を原文とLLMへ残せることです。
+      </div>
+    </section>
+
+    <section id="pipeline" class="section">
+      <h2>5. 質問から回答まで、どう動くのか</h2>
+      <p class="section-intro">
+        パイプラインは大きく <strong>オフライン構築</strong> と <strong>オンライン検索</strong> に分かれます。
+        オフラインでは軽く索引を作り、オンラインでは 2 段階で relevant context を掘り当てます。
+      </p>
+
+      <div class="visual-flow">
+        <div class="flow-step">
+          <span class="num">01</span>
+          <h3>Graph Construction</h3>
+          <p>passage を sentence に分割し、spaCy などで entity を抽出。sentence-entity と passage-entity の疎行列だけを持つ。</p>
+        </div>
+        <div class="flow-step">
+          <span class="num">02</span>
+          <h3>Entity Activation</h3>
+          <p>クエリから entity を取り、sentence relevance を伝播させて、直接一致しない中間 entity まで活性化する。</p>
+        </div>
+        <div class="flow-step">
+          <span class="num">03</span>
+          <h3>Passage Ranking</h3>
+          <p>活性化 entity を種に Personalized PageRank を回し、グローバルに重要な passage を上位から返す。</p>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:18px;">
+        <div class="card">
+          <h3>Stage 1: Semantic Bridging</h3>
+          <p>
+            直接の entity match だけでは multi-hop の橋渡し entity を取りこぼします。
+            そこで query と sentence の意味類似度を使い、sentence-entity グラフ上で関連 entity を少しずつ広げます。
+            ただし無限に広がるとノイズが増えるので、閾値 <code>δ</code> による dynamic pruning で拡散を止めます。
+          </p>
+        </div>
+        <div class="card">
+          <h3>Stage 2: Global Importance Aggregation</h3>
+          <p>
+            活性化された entity から見て、どの passage が全体として重要かを Personalized PageRank で評価します。
+            局所一致だけでなく、周辺の構造全体を見て rank するので、単純な dense retrieval より reasoning chain を拾いやすくなります。
+          </p>
+        </div>
+      </div>
+
+      <figure class="img-card" style="margin-top:18px;">
+        <img src="../../figure/main_figure.png" alt="LinearRAG の全体図">
+        <figcaption>論文のメイン図。Naive RAG、GraphRAG、LinearRAG の違いと、提案法の構造が視覚的に整理されています。</figcaption>
+      </figure>
+
+      <div class="grid-2" style="margin-top:18px;">
+        <div class="card">
+          <h3>オンライン検索の実行シーケンス</h3>
+          <div class="sequence">
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">1</span></div>
+              <div class="sequence-content">
+                <h3>質問を埋め込む</h3>
+                <p><code>retrieve()</code> が質問ベクトルを生成。後続のsentence・passage類似度で共用する。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">2</span></div>
+              <div class="sequence-content">
+                <h3>Seed entityを決める</h3>
+                <p><code>question_ner()</code> で質問entityを抽出し、entity embeddingとの内積が最大の候補へ対応づける。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">3</span></div>
+              <div class="sequence-content">
+                <h3>Sentenceを橋にentityを伝播</h3>
+                <p>各active entityにつながる文のうち、質問に近い上位 <code>top_k_sentence</code> 件だけを通す。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">4</span></div>
+              <div class="sequence-content">
+                <h3>Passage初期重みを作る</h3>
+                <p>dense類似度とactive entityの出現ボーナスを合成し、PPRのreset vectorへ加える。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">5</span></div>
+              <div class="sequence-content">
+                <h3>PPRで上位passageを返す</h3>
+                <p><code>igraph.personalized_pagerank()</code> のpassage部分だけを降順に並べ、上位k件を取得。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>実装上のスコア分解</h3>
+          <div class="formula">
+            <span class="dim">Entity propagation</span><br>
+            next_entity_score<br>
+            = <span class="teal-text">current_entity_score</span><br>
+            × <span class="orange-text">cosine(question, sentence)</span><br><br>
+            <span class="dim">Passage reset weight</span><br>
+            passage_score<br>
+            = passage_ratio × normalized_DPR<br>
+            + log(1 + entity_bonus)<br><br>
+            entity_bonus<br>
+            = entity_score × log(1 + occurrences) / tier
+          </div>
+          <p class="footer-note">
+            <code>tier</code> が深いentityほど寄与を割り引き、同じentityがpassage内に複数回現れると対数的に加点します。
+            最後に <code>passage_node_weight</code> を掛けて、entity重みと同じreset vectorへ載せます。
+          </p>
+        </div>
+      </div>
+
+      <div class="compare-grid" style="margin-top:18px;">
+        <div class="compare-card">
+          <span class="source-tag">default: BFS iteration</span>
+          <h3>逐次探索版</h3>
+          <ul>
+            <li>active entityごとに未使用sentenceを取得</li>
+            <li>質問類似度の高いsentenceだけを選択</li>
+            <li>閾値未満のentityをその場で枝刈り</li>
+            <li>処理が追いやすく、CPUでも動作可能</li>
+          </ul>
+        </div>
+        <div class="compare-card recommended">
+          <span class="source-tag">--use_vectorized_retrieval</span>
+          <h3>疎行列・GPU版</h3>
+          <ul>
+            <li>entity→sentence、sentence→entityをPyTorch COO疎行列化</li>
+            <li>全sentence類似度を先に一括計算</li>
+            <li>重複排除、entity単位top-k、閾値処理はBFS版に合わせる</li>
+            <li>大規模データで並列計算を活かしやすい</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="example" class="section">
+      <h2>6. Multi-hop検索の要点を短く振り返る</h2>
+      <p class="section-intro">
+        以下は仕組みを理解するための簡略例です。実際の検索ではentity名・文・passageが埋め込みとハッシュIDで管理されます。
+      </p>
+
+      <div class="hop-board">
+        <div class="hop-track">
+          <div class="hop-node">
+            <span class="kind">Question / seed</span>
+            <strong>「LinearRAGを提案した研究者の所属機関は？」</strong>
+            <small>質問NERが研究者名をseed entityとして認識したと仮定。</small>
+          </div>
+          <div class="hop-edge">文類似度<br>→</div>
+          <div class="hop-node">
+            <span class="kind">Sentence bridge</span>
+            <strong>「A氏らはLinearRAGを提案した」</strong>
+            <small>seed entityを含み、質問との意味類似度が高い文が選ばれる。</small>
+          </div>
+          <div class="hop-edge">mention<br>→</div>
+          <div class="hop-node">
+            <span class="kind">Activated entity</span>
+            <strong>大学・研究機関名</strong>
+            <small>同じ文または次の関連文に現れるentityへスコアが伝播する。</small>
+          </div>
+          <div class="hop-edge">PPR<br>→</div>
+          <div class="hop-node">
+            <span class="kind">Retrieved passage</span>
+            <strong>著者・所属を記載した原文passage</strong>
+            <small>dense一致とentity構造の両方で高得点になり、回答根拠としてLLMへ渡る。</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px;">
+        <div class="card">
+          <h3>なぜdense検索だけでは難しいか</h3>
+          <p>質問と所属passageが語彙的に遠い場合、直接のベクトル類似度だけでは順位が下がりやすい。</p>
+        </div>
+        <div class="card">
+          <h3>なぜrelation tripleが不要か</h3>
+          <p>「提案した」「所属する」という意味は原文sentenceに残し、entity共起と文類似度で橋を選べる。</p>
+        </div>
+        <div class="card">
+          <h3>なぜPPRを最後に使うか</h3>
+          <p>単一の局所一致ではなく、複数のactive entityから支持されるpassageを全体構造で上げられる。</p>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:18px;">
+        <div class="callout-mark">0</div>
+        <p>
+          質問からentityを1つも抽出できない場合、実装はグラフ探索を無理に行いません。
+          <code>dense_passage_retrieval()</code> にフォールバックし、通常のベクトル検索として上位passageを返します。
+        </p>
+      </div>
+    </section>
+
+    <section id="results" class="section">
+      <h2>7. 何が良くなったのか</h2>
+      <p class="section-intro">
+        著者らは、LinearRAG の価値を <strong>精度</strong> と <strong>効率</strong> の両方で示しています。
+        重要なのは、速いだけでも、精度が高いだけでもなく、<strong>両方をかなり良い水準で両立</strong>している点です。
+      </p>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <span class="label">2Wiki GPT-Acc.</span>
+          <span class="value">63.70</span>
+          <span class="sub">論文中で主要な改善点として強調</span>
+        </div>
+        <div class="metric">
+          <span class="label">Indexing Time</span>
+          <span class="value">249.78s</span>
+          <span class="sub">比較対象よりかなり短い</span>
+        </div>
+        <div class="metric">
+          <span class="label">Prompt Tokens</span>
+          <span class="value">0</span>
+          <span class="sub">indexing / retrieval とも LLM 呼び出しなし</span>
+        </div>
+        <div class="metric">
+          <span class="label">Overall Accuracy</span>
+          <span class="value">66.95</span>
+          <span class="sub">表 2 の平均精度で最良</span>
+        </div>
+      </div>
+
+      <div class="table-like">
+        <div class="row header">
+          <div class="cell">Method</div>
+          <div class="cell">Indexing</div>
+          <div class="cell">Retrieval</div>
+          <div class="cell">LLM Cost</div>
+          <div class="cell">Accuracy</div>
+        </div>
+        <div class="row">
+          <div class="cell badge">LightRAG</div>
+          <div class="cell">4933.22s</div>
+          <div class="cell">10.963s</div>
+          <div class="cell">非常に大きい</div>
+          <div class="cell">47.10</div>
+        </div>
+        <div class="row">
+          <div class="cell badge">HippoRAG</div>
+          <div class="cell">936.00s</div>
+          <div class="cell">1.461s</div>
+          <div class="cell">あり</div>
+          <div class="cell">63.00</div>
+        </div>
+        <div class="row">
+          <div class="cell badge">GFM-RAG</div>
+          <div class="cell">1202.77s</div>
+          <div class="cell">1.211s</div>
+          <div class="cell">あり</div>
+          <div class="cell">63.20</div>
+        </div>
+        <div class="row">
+          <div class="cell badge">LinearRAG</div>
+          <div class="cell best">249.78s</div>
+          <div class="cell best">0.093s</div>
+          <div class="cell best">0 / 0</div>
+          <div class="cell best">66.95</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:18px;">
+        <figure class="img-card">
+          <img src="../../figure/generation_results.png" alt="性能比較図">
+          <figcaption>エンドツーエンドの generation performance。複数データセットで LinearRAG が上位に位置します。</figcaption>
+        </figure>
+        <figure class="img-card">
+          <img src="../../figure/efficiency_result.png" alt="効率比較図">
+          <figcaption>効率比較。グラフを使いながらも、構築と検索の両方で軽量に寄せているのが特徴です。</figcaption>
+        </figure>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px;">
+        <div class="card">
+          <h3>精度面の意味</h3>
+          <p>GraphRAG の「広く拾える」強みを残しつつ、relation noise を減らして relevance を改善した。</p>
+        </div>
+        <div class="card">
+          <h3>効率面の意味</h3>
+          <p>relation extraction や graph summarization を避けたことで、indexing の重さを根本から削った。</p>
+        </div>
+        <div class="card">
+          <h3>実運用面の意味</h3>
+          <p>大量コーパスや更新頻度の高いコーパスでも、コストを抑えて GraphRAG 的な検索を回しやすい。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="limits" class="section">
+      <h2>8. 設計上の強みと、読むべき制約</h2>
+      <p class="section-intro">
+        「論文が主張する性質」と「このコードで確認できる挙動」を分けて整理します。
+      </p>
+
+      <div class="legend">
+        <span class="paper">論文</span>
+        <span class="codebase">実装</span>
+        <span class="both">両方で確認</span>
+      </div>
+
+      <div class="grid-2" style="margin-top:16px;">
+        <div class="card">
+          <span class="chip both">両方で確認</span>
+          <h3 style="margin-top:12px;">IndexingでLLMを呼ばない</h3>
+          <p>NERとembeddingだけで索引を作る。LLMは取得passageから回答を生成する最終段階でのみ使われる。</p>
+        </div>
+        <div class="card">
+          <span class="chip both">両方で確認</span>
+          <h3 style="margin-top:12px;">Relation labelを保存しない</h3>
+          <p>接続はentityの出現関係が中心。自然言語の関係意味はsentence・passage本文に保持する。</p>
+        </div>
+        <div class="card">
+          <span class="chip codebase">実装固有</span>
+          <h3 style="margin-top:12px;">隣接passage辺を追加する</h3>
+          <p><code>0:...</code> のような連番付きpassageを順番に接続し、文書の局所的な連続性もPPRへ入れる。</p>
+        </div>
+        <div class="card">
+          <span class="chip codebase">実装固有</span>
+          <h3 style="margin-top:12px;">属性質問向け補助boost</h3>
+          <p>設定を有効化すると、where / born / founded等の語が質問とpassageで重なる場合に追加点を与えられる。</p>
+        </div>
+      </div>
+
+      <div class="problem-stack" style="margin-top:18px;">
+        <div class="mini-card bad">
+          <strong>NER品質への依存</strong>
+          entityを落とすとグラフ経路自体が作れない。表記揺れも埋め込み対応だけで完全には解決しない。
+        </div>
+        <div class="mini-card bad">
+          <strong>Sentence共起はrelationの正しさを保証しない</strong>
+          同じ文に現れるだけで因果・所属・否定などの関係種別は区別しない。最終解釈は取得本文とLLMに委ねる。
+        </div>
+        <div class="mini-card bad">
+          <strong>パラメータが探索の広さを左右する</strong>
+          <code>iteration_threshold</code>、<code>max_iterations</code>、<code>top_k_sentence</code> が小さすぎても大きすぎても、recallとnoiseのバランスが崩れる。
+        </div>
+        <div class="mini-card good">
+          <strong>失敗時の退路が単純</strong>
+          seed entityが得られなければdense retrievalへ戻るため、グラフ検索だけに全面依存しない。
+        </div>
+      </div>
+    </section>
+
+    <section id="takeaway" class="section">
+      <h2>9. 初めての人向けの持ち帰り</h2>
+      <p class="section-intro">
+        LinearRAG は「GraphRAG をもっと賢くした」論文というより、
+        <strong>GraphRAG から壊れやすい部分だけを削って、残すべき構造だけを残した</strong>論文です。
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>向いているケース</h3>
+          <ul class="hero-list">
+            <li>複数文書にまたがる multi-hop 質問を扱いたい</li>
+            <li>GraphRAG は使いたいが relation extraction の品質が信用しにくい</li>
+            <li>LLM トークンコストを indexing に使いたくない</li>
+            <li>大きいコーパスを継続的に更新したい</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>注意して読むべき点</h3>
+          <ul class="hero-list">
+            <li>relation label 自体が必要な下流タスクには別評価が必要</li>
+            <li>entity extraction と sentence embedding の品質には依存する</li>
+            <li>「relation を作らない」設計が常に最適とは限らない</li>
+            <li>ただし GraphRAG の現実的な代替案としてはかなり筋が良い</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quote-box">
+        初学者向けに一言で言えば、<strong>「複雑な知識グラフを無理に作らず、原文を活かしたまま、必要なつながりだけを検索時に浮かび上がらせる」</strong>のが LinearRAG です。
+      </div>
+
+      <p class="footer-note">
+        参照: <a href="./2510.10114v4.pdf">元論文 PDF</a> /
+        <a href="./2510.10114v4_ja_summary.md">日本語詳細要約</a>
+      </p>
+    </section>
+  </div>
+</body>
+</html>

@@ -11,8 +11,11 @@ from src.utils import LLM_Model
 from src.utils import setup_logging
 from datetime import datetime
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 warnings.filterwarnings('ignore')
+
+from dotenv import load_dotenv
+load_dotenv()
 
 def parse_arguments():
     parser = argparse.ArgumentParser()

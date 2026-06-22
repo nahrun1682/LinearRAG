@@ -1,0 +1,935 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]: 論文ビジュアルガイド / 初学者向け
+    - heading "LinearRAG を ひと目で理解する" [level=1] [ref=e5]:
+      - text: LinearRAG を
+      - text: ひと目で理解する
+    - paragraph [ref=e6]:
+      - text: このページは、
+      - strong [ref=e7]: 「なぜ GraphRAG がうまくいかないことがあるのか」
+      - text: 、 そして
+      - strong [ref=e8]: LinearRAG が何を捨てて、何を残したのか
+      - text: を、 図解中心でつかむための日本語ガイドです。
+    - generic [ref=e9]:
+      - generic [ref=e10]: "問題: Relation extraction が重くて壊れやすい"
+      - generic [ref=e11]: "解法: Relation-free Tri-Graph"
+      - generic [ref=e12]: "検索: 2 段階 retrieval"
+      - generic [ref=e13]: "利点: 高速・低コスト・高精度"
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - heading "この論文のひと言要約" [level=3] [ref=e16]
+        - paragraph [ref=e17]:
+          - text: GraphRAG の強みは残しつつ、
+          - strong [ref=e18]: 明示的な関係抽出だけをやめる
+          - text: 。 その代わりに、
+          - strong [ref=e19]: エンティティ・文・パッセージ
+          - text: をつなぐ軽量グラフを作り、 意味伝播と PageRank で multi-hop 検索を実現する。
+      - generic [ref=e20]:
+        - heading "このページで分かること" [level=3] [ref=e21]
+        - list [ref=e22]:
+          - listitem [ref=e23]: 従来 GraphRAG のどこが不安定なのか
+          - listitem [ref=e24]: LinearRAG の構造と検索フロー
+          - listitem [ref=e25]: 性能・効率で何が改善したのか
+          - listitem [ref=e26]: どういう用途に向いているのか
+    - navigation [ref=e27]:
+      - link "1. まず問題" [ref=e28] [cursor=pointer]:
+        - /url: "#problem"
+      - link "2. コアアイデア" [ref=e29] [cursor=pointer]:
+        - /url: "#idea"
+      - link "3. 実装設計" [ref=e30] [cursor=pointer]:
+        - /url: "#implementation"
+      - link "4. 構築/RAG具体例" [ref=e31] [cursor=pointer]:
+        - /url: "#walkthrough"
+      - link "5. 実データのグラフ" [ref=e32] [cursor=pointer]:
+        - /url: "#livegraph"
+      - link "6. 検索フロー" [ref=e33] [cursor=pointer]:
+        - /url: "#pipeline"
+      - link "7. Multi-hop" [ref=e34] [cursor=pointer]:
+        - /url: "#example"
+      - link "8. 結果" [ref=e35] [cursor=pointer]:
+        - /url: "#results"
+      - link "9. 制約" [ref=e36] [cursor=pointer]:
+        - /url: "#limits"
+      - link "10. 使いどころ" [ref=e37] [cursor=pointer]:
+        - /url: "#takeaway"
+  - generic [ref=e38]:
+    - heading "1. まず何が問題だったのか" [level=2] [ref=e39]
+    - paragraph [ref=e40]:
+      - text: 論文の出発点は、
+      - strong [ref=e41]: GraphRAG は理屈の上では強そうなのに、実際には naive RAG を下回ることがある
+      - text: という観察です。 著者たちは原因を「relation extraction ベースのグラフ構築」に絞って分析しています。
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - heading "従来 GraphRAG の期待" [level=3] [ref=e44]
+        - paragraph [ref=e45]: 文書をグラフ化すると、離れた文書同士のつながりをたどれるため、 複雑な質問でも必要な証拠を拾いやすくなるはずです。
+      - generic [ref=e46]:
+        - heading "実際に起きること" [level=3] [ref=e47]
+        - paragraph [ref=e48]:
+          - text: つながりを増やした分だけ、
+          - strong [ref=e49]: 誤った関係や整合しない関係
+          - text: も増えます。 その結果、recall は上がっても relevance が落ち、回答生成が不安定になります。
+    - generic [ref=e50]:
+      - generic [ref=e51]:
+        - strong [ref=e52]: 局所的不正確性
+        - text: 単文からの relation extraction が否定やニュアンスを落とし、事実と異なる三つ組を生成する。
+      - generic [ref=e53]:
+        - strong [ref=e54]: 大域的不整合性
+        - text: passage ごとに別々に抽出した関係が、コーパス全体で見ると矛盾・重複・構造崩れを起こす。
+      - generic [ref=e55]:
+        - strong [ref=e56]: 論文の発想転換
+        - text: 「関係を正しく抽出する」のではなく、
+        - strong [ref=e57]: 関係を無理に抽出しない
+        - text: 方向へ設計を切り替える。
+    - generic [ref=e58]: 重要なのは「情報をつなぐアンカーは relation ではなく entity で十分ではないか」という発想です。 関係の意味は三つ組より原文パッセージのほうが自然に保持できます。
+  - generic [ref=e59]:
+    - heading "2. LinearRAG のコアアイデア" [level=2] [ref=e60]
+    - paragraph [ref=e61]:
+      - text: LinearRAG は、
+      - strong [ref=e62]: relation graph
+      - text: を作らず、
+      - strong [ref=e63]: entity / sentence / passage の 3 層だけで knowledge structure を作る
+      - text: のが最大の特徴です。
+    - generic [ref=e64]:
+      - heading "Tri-Graph のイメージ" [level=3] [ref=e65]
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]: Sentence A
+          - generic [ref=e69]: Sentence B
+          - generic [ref=e70]: Sentence C
+        - generic [ref=e71]:
+          - generic [ref=e72]: ↔
+          - generic [ref=e73]: mention
+        - generic [ref=e74]:
+          - generic [ref=e75]: Entity X
+          - generic [ref=e76]: Entity Y
+          - generic [ref=e77]: Entity Z
+        - generic [ref=e78]:
+          - generic [ref=e79]: ↔
+          - generic [ref=e80]: contain
+        - generic [ref=e81]:
+          - generic [ref=e82]: Passage 1
+          - generic [ref=e83]: Passage 2
+          - generic [ref=e84]: Passage 3
+      - paragraph [ref=e85]: ポイントは、entity 同士を relation label で直接結ばないことです。 構造は軽く保ち、意味の本体は元のテキストに残します。
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - heading "捨てたもの" [level=3] [ref=e88]
+        - paragraph [ref=e89]: OpenIE 的な relation extraction、relation label の品質管理、複雑な関係スキーマ。
+      - generic [ref=e90]:
+        - heading "残したもの" [level=3] [ref=e91]
+        - paragraph [ref=e92]: entity の整合、文脈の近さ、元の passage の意味情報、graph-based retrieval の広がり。
+      - generic [ref=e93]:
+        - heading "得たもの" [level=3] [ref=e94]
+        - paragraph [ref=e95]: 線形スケーラビリティ、LLM トークン消費ゼロの indexing、ノイズに強い multi-hop 検索。
+  - generic [ref=e96]:
+    - heading "3. ソースコードで見る実装設計" [level=2] [ref=e97]
+    - paragraph [ref=e98]:
+      - text: ここからは論文の概念を、このリポジトリで実際に動くクラスとデータに対応づけます。 色分けは
+      - strong [ref=e99]: 橙=入力
+      - text: 、
+      - strong [ref=e100]: 緑=処理
+      - text: 、
+      - strong [ref=e101]: 青=永続化・索引
+      - text: 、
+      - strong [ref=e102]: 赤=最終出力
+      - text: です。
+    - generic [ref=e103]:
+      - generic [ref=e104]:
+        - heading "Input / entry point" [level=3] [ref=e105]
+        - generic [ref=e106]:
+          - strong [ref=e107]: dataset/*/chunks.json
+          - generic [ref=e108]:
+            - text: 原文チャンク。
+            - code [ref=e109]: run.py
+            - text: が先頭に連番を付けて passage 化。
+        - generic [ref=e110]: ↓
+        - generic [ref=e111]:
+          - strong [ref=e112]: dataset/*/questions.json
+          - generic [ref=e113]:
+            - text: 質問と正解。索引構築後に
+            - code [ref=e114]: qa()
+            - text: へ渡される。
+        - generic [ref=e115]:
+          - strong [ref=e116]: run.py / main()
+          - generic [ref=e117]:
+            - text: 設定、モデル、データを組み立て、
+            - code [ref=e118]: index → qa → evaluate
+            - text: を実行。
+      - generic [ref=e119]:
+        - heading "LinearRAG core" [level=3] [ref=e120]
+        - generic [ref=e121]:
+          - strong [ref=e122]: index(passages)
+          - generic [ref=e123]: passage埋め込み → NER → 文/エンティティ埋め込み → グラフ構築。
+        - generic [ref=e124]:
+          - strong [ref=e125]: SpacyNER.batch_ner()
+          - generic [ref=e126]: 各passageからentityを抽出し、entityが現れたsentenceも同時に記録。
+        - generic [ref=e127]:
+          - strong [ref=e128]: retrieve(questions)
+          - generic [ref=e129]: seed entityを決定し、semantic bridging、passage scoring、PPRを順に実行。
+        - generic [ref=e130]:
+          - strong [ref=e131]: qa(questions)
+          - generic [ref=e132]: 上位passageをプロンプトに連結し、LLMから最終回答を得る。
+      - generic [ref=e133]:
+        - heading "Stored artifacts / output" [level=3] [ref=e134]
+        - generic [ref=e135]:
+          - strong [ref=e136]: 3つのEmbeddingStore
+          - generic [ref=e137]: passage・sentence・entityを別々のParquetとして保存。
+        - generic [ref=e138]:
+          - strong [ref=e139]: ner_results.json
+          - generic [ref=e140]: passage→entity、sentence→entity対応を再利用するキャッシュ。
+        - generic [ref=e141]:
+          - strong [ref=e142]: LinearRAG.graphml
+          - generic [ref=e143]: igraphがPPRに使うentity-passageグラフ。隣接passage辺も含む。
+        - generic [ref=e144]:
+          - strong [ref=e145]: predictions.json
+          - generic [ref=e146]: 取得passage、スコア、生成回答を含む実行結果。
+    - generic [ref=e147]:
+      - generic [ref=e148]:
+        - strong [ref=e149]: passage_embedding.parquet
+        - text: Dense retrieval と passage 初期重みに使用。
+      - generic [ref=e150]:
+        - strong [ref=e151]: sentence_embedding.parquet
+        - text: 質問との類似度を測り、意味伝播の経路を選ぶ。
+      - generic [ref=e152]:
+        - strong [ref=e153]: entity_embedding.parquet
+        - text: 質問entityをコーパス内entityへ意味的に対応づける。
+      - generic [ref=e154]:
+        - strong [ref=e155]: LinearRAG.graphml
+        - text: entityとpassageを辺重み付きで保持し、PPRを実行。
+    - generic [ref=e156]:
+      - generic [ref=e157]:
+        - generic [ref=e158]: src/ner.py
+        - heading "NERは「ノード抽出」と「文脈保持」を同時に行う" [level=3] [ref=e159]
+        - paragraph [ref=e160]:
+          - code [ref=e161]: extract_entities_sentences()
+          - text: は spaCy の
+          - code [ref=e162]: doc.ents
+          - text: を走査し、 数値・序数を除外してentityを収集します。同時に
+          - code [ref=e163]: ent.sent.text
+          - text: を保存するため、 relation labelなしでも「同じ文で何と何が語られたか」を検索時に利用できます。
+      - generic [ref=e164]:
+        - generic [ref=e165]: src/embedding_store.py
+        - heading "各テキストは内容ハッシュで差分追加される" [level=3] [ref=e166]
+        - paragraph [ref=e167]:
+          - code [ref=e168]: compute_mdhash_id()
+          - text: で namespace付きMD5を作り、未登録テキストだけを埋め込みます。 既存Parquetを読み戻すため、同じコーパスの再実行で全件を再計算しない構成です。
+    - generic [ref=e169]:
+      - generic [ref=e170]: "!"
+      - paragraph [ref=e171]:
+        - text: 論文ではTri-Graphを entity / sentence / passage の3種ノードとして説明します。 この実装では、
+        - strong [ref=e172]: sentenceは伝播用の対応表・疎行列として扱い、igraph本体にはentityとpassageを登録
+        - text: します。 概念は同じですが、PPR用グラフとsemantic bridging用構造を分離した実装です。
+  - generic [ref=e173]:
+    - heading "4. 具体例で理解するグラフ構築とRAG" [level=2] [ref=e174]
+    - paragraph [ref=e175]:
+      - text: ここでは、架空の3つのpassageをLinearRAGへ登録し、
+      - strong [ref=e176]: 「アーク研究所を設立した人物が受賞した賞は？」
+      - text: という質問に答えるまでを追います。 答えは1つのpassageには書かれておらず、人物を橋にして2つのpassageをまたぐ必要があります。
+    - 'heading "Step 1: 原文をpassageとして受け取る" [level=3] [ref=e177]'
+    - generic [ref=e178]:
+      - article [ref=e179]:
+        - text: PASSAGE 0
+        - paragraph [ref=e180]: アーク研究所は、 量子材料を研究する独立機関である。 同研究所は佐藤葵によって設立された。
+      - article [ref=e181]:
+        - text: PASSAGE 1
+        - paragraph [ref=e182]: 物理学者の佐藤葵は、 2024年に星雲科学賞を受賞した。 受賞理由は量子材料の研究である。
+      - article [ref=e183]:
+        - text: PASSAGE 2
+        - paragraph [ref=e184]: 星雲大学は、 宇宙物理学と計算科学の教育で知られている。 研究所とは直接関係しない背景文書である。
+    - generic [ref=e185]: Dense RAGでは「アーク研究所」に直接一致するPassage 0は見つけやすい一方、 質問に研究者名が書かれていないため、答えの「星雲科学賞」があるPassage 1を上位に置けるとは限りません。
+    - generic [ref=e187]: index(passages)
+    - 'heading "Step 2: spaCy NERでentityとsentenceを抽出する" [level=3] [ref=e188]'
+    - paragraph [ref=e189]:
+      - code [ref=e190]: SpacyNER.batch_ner()
+      - text: は、各passageに含まれるentityと、 entityが現れたsentenceを記録します。関係を「設立者」「受賞者」のようなラベルへ変換せず、原文をそのまま残す点が重要です。
+    - generic [ref=e191]:
+      - generic [ref=e192]:
+        - heading "passage → entities" [level=3] [ref=e193]
+        - generic [ref=e194]:
+          - generic [ref=e195]:
+            - generic [ref=e196]: Passage 0
+            - generic [ref=e197]: →
+            - generic [ref=e198]: アーク研究所 / 佐藤葵
+          - generic [ref=e199]:
+            - generic [ref=e200]: Passage 1
+            - generic [ref=e201]: →
+            - generic [ref=e202]: 佐藤葵 / 星雲科学賞
+          - generic [ref=e203]:
+            - generic [ref=e204]: Passage 2
+            - generic [ref=e205]: →
+            - generic [ref=e206]: 星雲大学
+      - generic [ref=e207]:
+        - heading "sentence → entities" [level=3] [ref=e208]
+        - generic [ref=e209]:
+          - generic [ref=e210]:
+            - generic [ref=e211]: Sentence A
+            - generic [ref=e212]: →
+            - generic [ref=e213]: アーク研究所
+          - generic [ref=e214]:
+            - generic [ref=e215]: Sentence B
+            - generic [ref=e216]: →
+            - generic [ref=e217]: アーク研究所 / 佐藤葵
+          - generic [ref=e218]:
+            - generic [ref=e219]: Sentence C
+            - generic [ref=e220]: →
+            - generic [ref=e221]: 佐藤葵 / 星雲科学賞
+    - generic [ref=e223]: extract_nodes_and_edges()
+    - 'heading "Step 3: 「原文への索引」としてTri-Graphを組み立てる" [level=3] [ref=e224]'
+    - paragraph [ref=e225]:
+      - text: 青い四角がpassage、橙の破線四角がsentence、緑の丸がentityです。
+      - strong [ref=e226]: 佐藤葵
+      - text: がPassage 0とPassage 1をつなぐ橋になります。 LinearRAGは「佐藤葵 --設立した→ アーク研究所」というrelation edgeを作りません。
+    - generic "具体例から構築されたTri-Graph" [ref=e228]:
+      - generic [ref=e229]: PASSAGES
+      - generic [ref=e230]: SENTENCES
+      - generic [ref=e231]: ENTITIES
+      - generic [ref=e232]:
+        - text: Passage 0
+        - text: 研究所・設立者
+      - generic [ref=e233]:
+        - text: Passage 1
+        - text: 人物・受賞
+      - generic [ref=e234]:
+        - text: Passage 2
+        - text: 背景ノイズ
+      - generic [ref=e235]:
+        - text: Sentence A
+        - text: 研究所の説明
+      - generic [ref=e236]:
+        - text: Sentence B
+        - text: 佐藤葵が設立
+      - generic [ref=e237]:
+        - text: Sentence C
+        - text: 佐藤葵が受賞
+      - generic [ref=e238]:
+        - text: Sentence D
+        - text: 大学の説明
+      - generic [ref=e239]: アーク研究所
+      - generic [ref=e240]: 佐藤葵
+      - generic [ref=e241]: 星雲科学賞
+      - generic [ref=e242]: 星雲大学
+    - generic [ref=e254]:
+      - generic [ref=e255]:
+        - generic [ref=e256]: EmbeddingStore
+        - heading "3種類を別々に埋め込む" [level=3] [ref=e257]
+        - paragraph [ref=e258]: passageはdense検索、sentenceは橋の選択、entityは質問中の名前とコーパス中の名前の対応づけに使います。
+      - generic [ref=e259]:
+        - generic [ref=e260]: add_entity_to_passage_edges()
+        - heading "出現頻度を辺重みにする" [level=3] [ref=e261]
+        - paragraph [ref=e262]: entityがpassage内に何回現れたかを数え、そのpassage内の全entity出現数で正規化します。
+      - generic [ref=e263]:
+        - generic [ref=e264]: add_adjacent_passage_edges()
+        - heading "隣接passageも接続する" [level=3] [ref=e265]
+        - paragraph [ref=e266]: 連番付きpassageでは前後関係も辺として追加し、元文書の局所的な連続性を保持します。
+    - generic [ref=e268]: retrieve(question)
+    - 'heading "Step 4: 質問からseed entityを決める" [level=3] [ref=e269]'
+    - generic [ref=e270]:
+      - generic [ref=e271]:
+        - generic [ref=e272]: get_seed_entities()
+        - heading "質問" [level=3] [ref=e273]
+        - paragraph [ref=e274]:
+          - strong [ref=e275]: 「アーク研究所を設立した人物が受賞した賞は？」
+        - paragraph [ref=e276]:
+          - text: 質問NERは「アーク研究所」を抽出します。そのembeddingと最も近いコーパス内entityを探し、
+          - strong [ref=e277]: アーク研究所
+          - text: を探索開始点にします。
+      - generic [ref=e278]:
+        - heading "初期状態" [level=3] [ref=e279]
+        - generic [ref=e280]:
+          - generic [ref=e281]:
+            - strong [ref=e282]: 研究所
+            - generic [ref=e285]: "0.96"
+          - generic [ref=e286]:
+            - strong [ref=e287]: 佐藤葵
+            - generic [ref=e289]: "0.00"
+          - generic [ref=e290]:
+            - strong [ref=e291]: 科学賞
+            - generic [ref=e293]: "0.00"
+        - paragraph [ref=e294]: 数値は仕組みを示すための例で、実測値ではありません。
+    - 'heading "Step 5: sentenceを橋にして必要なentityを活性化する" [level=3] [ref=e295]'
+    - generic [ref=e296]:
+      - generic [ref=e297]:
+        - generic [ref=e298]: Iteration 0
+        - strong [ref=e299]: アーク研究所
+        - paragraph [ref=e300]: 質問に直接現れるseed。活性値 0.96 から開始。
+        - text: →
+      - generic [ref=e301]:
+        - generic [ref=e302]: Sentence selection
+        - strong [ref=e303]: Sentence B
+        - paragraph [ref=e304]: 「設立した人物」という質問意図に近いため、研究所の一般説明より高く評価。
+        - text: →
+      - generic [ref=e305]:
+        - generic [ref=e306]: Iteration 1
+        - strong [ref=e307]: 佐藤葵
+        - paragraph [ref=e308]: Sentence Bに共起するentityへ、seed score × sentence similarityを伝播。
+        - text: →
+      - generic [ref=e309]:
+        - generic [ref=e310]: Iteration 2
+        - strong [ref=e311]: 星雲科学賞
+        - paragraph [ref=e312]: 佐藤葵を含み「受賞」に近いSentence Cを介して、答え候補まで到達。
+    - generic [ref=e313]:
+      - generic [ref=e314]: δ
+      - paragraph [ref=e315]:
+        - text: 各伝播スコアが
+        - code [ref=e316]: iteration_threshold
+        - text: 未満なら、その先は探索しません。 また各entityから選ぶ文を
+        - code [ref=e317]: top_k_sentence
+        - text: 件に制限するため、 「同じentityが出ただけ」の無関係な文へ際限なく広がるのを防ぎます。
+    - 'heading "Step 6: PPRで「答えを支えるpassage」を順位付けする" [level=3] [ref=e318]'
+    - generic [ref=e319]:
+      - generic [ref=e320]:
+        - generic [ref=e321]: calculate_passage_scores()
+        - heading "2つの信号を合成" [level=3] [ref=e322]
+        - paragraph [ref=e323]: 質問とpassageのdense類似度に加え、活性化されたentityがpassage内に何回現れるかを加点します。 Passage 1は「佐藤葵」と「星雲科学賞」の両方から支持されます。
+        - generic [ref=e324]:
+          - text: reset(P1)
+          - text: = dense similarity
+          - text: + 佐藤葵 bonus
+          - text: + 星雲科学賞 bonus
+      - generic [ref=e325]:
+        - generic [ref=e326]: run_ppr()
+        - heading "最終passage順位の例" [level=3] [ref=e327]
+        - generic [ref=e328]:
+          - generic [ref=e329]:
+            - strong [ref=e330]: Passage 1
+            - generic [ref=e333]: 1位
+          - generic [ref=e334]:
+            - strong [ref=e335]: Passage 0
+            - generic [ref=e338]: 2位
+          - generic [ref=e339]:
+            - strong [ref=e340]: Passage 2
+            - generic [ref=e343]: 3位
+        - paragraph [ref=e344]: 順位とバーは説明用です。実際はigraphのPersonalized PageRankスコアで決まります。
+    - generic [ref=e346]: qa() → LLM
+    - 'heading "Step 7: 上位passageをLLMへ渡して回答を生成する" [level=3] [ref=e347]'
+    - generic [ref=e348]:
+      - generic [ref=e349]:
+        - text: "[Retrieved Passage 1]"
+        - text: 物理学者の佐藤葵は、2024年に星雲科学賞を受賞した。
+        - text: "[Retrieved Passage 0]"
+        - text: アーク研究所は佐藤葵によって設立された。
+        - text: "Question:"
+        - text: アーク研究所を設立した人物が受賞した賞は？
+      - generic [ref=e350]:
+        - strong [ref=e351]: "Answer: 星雲科学賞"
+        - paragraph [ref=e352]:
+          - text: LLMはPassage 0から「設立者=佐藤葵」を確認し、 Passage 1から「佐藤葵の受賞=星雲科学賞」を読み取ります。 グラフは答えそのものを生成せず、
+          - strong [ref=e353]: 答えに必要な原文を揃える検索器
+          - text: として働きます。
+    - generic [ref=e354]: この例の本質は、グラフ構築時に「設立した」「受賞した」というrelationを正規化して保存しなくても、 entityをアンカーに関連sentenceを選び、最終的な関係解釈を原文とLLMへ残せることです。
+  - generic [ref=e355]:
+    - heading "5. 実データで構築されたグラフをHTMLで見る" [level=2] [ref=e356]
+    - paragraph [ref=e357]:
+      - text: ここまでは概念図と架空例でした。この節では、実際に
+      - code [ref=e358]: 2wikimultihop
+      - text: の一部（
+      - code [ref=e359]: test10
+      - text: ": 質問10件・チャンク658件）で"
+      - code [ref=e360]: index()
+      - text: を実行して
+      - strong [ref=e361]: 本当に構築されたグラフ
+      - text: を、インタラクティブHTMLで見ながら検索の流れをたどります。 図は
+      - code [ref=e362]: import/test10/LinearRAG.graphml
+      - text: から
+      - code [ref=e363]: tools/visualize_graph.py
+      - text: が生成したもので、 4万ノードのうち「Lothair II」周辺だけを抜き出しています。
+    - generic [ref=e364]:
+      - generic [ref=e365]:
+        - generic [ref=e366]: 総ノード数
+        - generic [ref=e367]: 41,901
+        - generic [ref=e368]: entity + passage の2種
+      - generic [ref=e369]:
+        - generic [ref=e370]: passage ノード
+        - generic [ref=e371]: "658"
+        - generic [ref=e372]: 原文チャンク
+      - generic [ref=e373]:
+        - generic [ref=e374]: entity ノード
+        - generic [ref=e375]: 41,243
+        - generic [ref=e376]: spaCy NER で抽出
+      - generic [ref=e377]:
+        - generic [ref=e378]: エッジ数
+        - generic [ref=e379]: 69,707
+        - generic [ref=e380]: passage↔entity / 隣接passage
+    - generic [ref=e381]:
+      - generic [ref=e382]: i
+      - paragraph [ref=e383]:
+        - text: 保存済みの
+        - code [ref=e384]: LinearRAG.graphml
+        - text: には
+        - strong [ref=e385]: entity と passage しか入っていません
+        - text: 。 sentence は別ファイル（
+        - code [ref=e386]: sentence_embedding.parquet
+        - text: と
+        - code [ref=e387]: ner_results.json
+        - text: ）に保持され、 検索時に「entity→文→entity」を
+        - strong [ref=e388]: 埋め込み類似度で動的にたどる
+        - text: ために使われます。 下の①の図は、その動的な橋渡しを理解しやすいよう、文ノードをあえて重ねて描いたものです。
+    - generic [ref=e389]:
+      - heading "HTML内の色の意味（pyvis 描画）" [level=3] [ref=e390]
+      - generic [ref=e391]:
+        - generic [ref=e392]: ■ passage（原文チャンク）
+        - generic [ref=e393]: ● entity（複数passageを橋渡し）
+        - generic [ref=e394]: ● entity（単独出現）
+        - generic [ref=e395]: ◆ sentence（文）
+        - generic [ref=e396]: ● seed（探索の起点 entity）
+      - paragraph [ref=e397]:
+        - text: "エッジの色:"
+        - strong [ref=e398]: 灰
+        - text: =「entity がその passage に出現」、
+        - strong [ref=e399]: 黄
+        - text: =「entity がその sentence に出現」、
+        - strong [ref=e400]: 緑の破線
+        - text: =「隣接 passage（元コーパスで連続するチャンク）」。
+    - heading "① 文レイヤー入り：entity ↔ sentence ↔ entity の橋渡し" [level=3] [ref=e401]
+    - paragraph [ref=e402]:
+      - text: 起点（緑）は質問「
+      - strong [ref=e403]: When did Lothair II's mother die?
+      - text: 」から取った
+      - code [ref=e404]: lothair ii
+      - text: 。 紫の菱形が文で、黄色い線で複数 entity につながります。
+      - strong [ref=e405]: 1つの文が複数 entity を結び、その entity がまた別の文へ
+      - text: ……という連鎖が、relation ラベルなしの multi-hop の正体です。
+    - iframe [ref=e407]:
+      - generic [active] [ref=f1e1]:
+        - generic:
+          - heading [level=1]
+        - generic:
+          - heading [level=1]
+    - paragraph [ref=e408]:
+      - text: 表示されない場合は
+      - link "別タブで開く" [ref=e409] [cursor=pointer]:
+        - /url: ../../import/test10/graph_view_sentences.html
+      - text: 。 ノードはドラッグ/ズームでき、ホバーで全文が出ます。
+    - heading "② entity ↔ passage：PPR が実際に走る本体グラフ" [level=3] [ref=e410]
+    - paragraph [ref=e411]: こちらは保存済み graphml そのままの構造（青四角=passage、ピンク=橋渡し entity、緑の破線=隣接passage）。 ある entity が複数の passage に出現することで、離れた passage 同士が間接的につながっているのが見えます。 ここに後述の重みを載せて Personalized PageRank を回します。
+    - iframe [ref=e413]:
+      - generic [active] [ref=f2e1]:
+        - generic:
+          - heading [level=1]
+        - generic:
+          - heading [level=1]
+    - paragraph [ref=e414]:
+      - text: "別タブ:"
+      - link "entity↔passage 図" [ref=e415] [cursor=pointer]:
+        - /url: ../../import/test10/graph_view_auto.html
+      - text: /
+      - link "最小構成図（Lothair II 16ノード）" [ref=e416] [cursor=pointer]:
+        - /url: ../../import/test10/graph_view.html
+      - text: 。 起点を変えるには
+      - code [ref=e417]: python tools/visualize_graph.py --seed "..." --with-sentences
+      - text: 。
+    - heading "このグラフ上で質問に答える流れ" [level=3] [ref=e418]
+    - paragraph [ref=e419]:
+      - text: 上の①②の図を見ながら、「
+      - strong [ref=e420]: When did Lothair II's mother die?
+      - text: 」が回答になるまでを実コードに沿って追います。
+    - generic [ref=e421]:
+      - generic [ref=e423]:
+        - generic [ref=e424]:
+          - generic [ref=e426]: "1"
+          - generic [ref=e427]:
+            - heading "seed entity を取る get_seed_entities()" [level=3] [ref=e428]:
+              - text: seed entity を取る
+              - generic [ref=e429]: get_seed_entities()
+            - paragraph [ref=e430]:
+              - text: 質問NERが
+              - code [ref=e431]: lothair ii
+              - text: を抽出 → embedding でグラフ内の最も近い entity に対応づけ（①の
+              - strong [ref=e432]: 緑ノード
+              - text: ）。
+        - generic [ref=e433]:
+          - generic [ref=e435]: "2"
+          - generic [ref=e436]:
+            - heading "文を橋に選ぶ calculate_entity_scores()" [level=3] [ref=e437]:
+              - text: 文を橋に選ぶ
+              - generic [ref=e438]: calculate_entity_scores()
+            - paragraph [ref=e439]:
+              - code [ref=e440]: lothair ii
+              - text: を含む文（①の
+              - strong [ref=e441]: 紫の菱形
+              - text: ）を質問と類似度比較し、上位
+              - code [ref=e442]: top_k_sentence
+              - text: 件だけ通す。
+        - generic [ref=e443]:
+          - generic [ref=e445]: "3"
+          - generic [ref=e446]:
+            - heading "次の entity を活性化" [level=3] [ref=e447]
+            - paragraph [ref=e448]:
+              - text: "選ばれた文に共起する別 entity（例:"
+              - code [ref=e449]: lotharingia
+              - text: や日付
+              - code [ref=e450]: 11 november 875
+              - text: など、①の黄色線の先）へ
+              - code [ref=e451]: entity_score × 文類似度
+              - text: を伝播。閾値未満は枝刈り。
+        - generic [ref=e452]:
+          - generic [ref=e454]: "4"
+          - generic [ref=e455]:
+            - heading "passage に初期重み calculate_passage_scores()" [level=3] [ref=e456]:
+              - text: passage に初期重み
+              - generic [ref=e457]: calculate_passage_scores()
+            - paragraph [ref=e458]:
+              - text: 質問との dense 類似度 + 「活性 entity が passage に何回出るか」のボーナス（②の
+              - strong [ref=e459]: 青四角
+              - text: に重みが乗る）。
+        - generic [ref=e460]:
+          - generic [ref=e462]: "5"
+          - generic [ref=e463]:
+            - heading "PPR で順位付け run_ppr()" [level=3] [ref=e464]:
+              - text: PPR で順位付け
+              - generic [ref=e465]: run_ppr()
+            - paragraph [ref=e466]:
+              - text: ②のグラフ上で Personalized PageRank を実行し、スコアを構造伝播 → passage を降順に並べて上位
+              - code [ref=e467]: retrieval_top_k
+              - text: 件。
+        - generic [ref=e468]:
+          - generic [ref=e470]: "6"
+          - generic [ref=e471]:
+            - heading "LLM が回答 qa()" [level=3] [ref=e472]:
+              - text: LLM が回答
+              - generic [ref=e473]: qa()
+            - paragraph [ref=e474]:
+              - text: 上位 passage を gpt-4o-mini に渡し、
+              - code [ref=e475]: "Thought: … Answer: …"
+              - text: 形式で母の死亡年を生成。
+              - code [ref=e476]: "Answer:"
+              - text: 以降が
+              - code [ref=e477]: predictions.json
+              - text: に入る。
+      - generic [ref=e478]:
+        - heading "図と仕組みの対応" [level=3] [ref=e479]
+        - generic [ref=e480]:
+          - generic [ref=e481]:
+            - generic [ref=e482]: 緑ノード
+            - generic [ref=e483]: =
+            - generic [ref=e484]: seed entity（質問から特定）
+          - generic [ref=e485]:
+            - generic [ref=e486]: 黄エッジ
+            - generic [ref=e487]: =
+            - generic [ref=e488]: entity↔sentence。multi-hop が伝わる経路
+          - generic [ref=e489]:
+            - generic [ref=e490]: ピンク
+            - generic [ref=e491]: =
+            - generic [ref=e492]: 複数 passage を橋渡しする entity
+          - generic [ref=e493]:
+            - generic [ref=e494]: 灰エッジ
+            - generic [ref=e495]: =
+            - generic [ref=e496]: entity↔passage。passage 採点に効く
+          - generic [ref=e497]:
+            - generic [ref=e498]: 青四角
+            - generic [ref=e499]: =
+            - generic [ref=e500]: passage。PPR で最終順位が決まる
+          - generic [ref=e501]:
+            - generic [ref=e502]: 緑破線
+            - generic [ref=e503]: =
+            - generic [ref=e504]: 隣接 passage。局所的連続性を伝播
+        - paragraph [ref=e505]: この test10 実行では LLM Accuracy 0.70 / Contain Accuracy 0.80（10問）でした。
+    - generic [ref=e506]:
+      - text: 要点：グラフは答えを作りません。
+      - strong [ref=e507]: 「答えに必要な原文 passage を揃える検索器」
+      - text: として働き、 最終的な関係の解釈（「mother」「died」の対応づけ）は原文と LLM に委ねます。 だから relation ラベルを索引時に作らなくても multi-hop に答えられます。
+  - generic [ref=e508]:
+    - heading "6. 質問から回答まで、どう動くのか" [level=2] [ref=e509]
+    - paragraph [ref=e510]:
+      - text: パイプラインは大きく
+      - strong [ref=e511]: オフライン構築
+      - text: と
+      - strong [ref=e512]: オンライン検索
+      - text: に分かれます。 オフラインでは軽く索引を作り、オンラインでは 2 段階で relevant context を掘り当てます。
+    - generic [ref=e513]:
+      - generic [ref=e514]:
+        - generic [ref=e515]: "01"
+        - heading "Graph Construction" [level=3] [ref=e516]
+        - paragraph [ref=e517]: passage を sentence に分割し、spaCy などで entity を抽出。sentence-entity と passage-entity の疎行列だけを持つ。
+        - text: →
+      - generic [ref=e518]:
+        - generic [ref=e519]: "02"
+        - heading "Entity Activation" [level=3] [ref=e520]
+        - paragraph [ref=e521]: クエリから entity を取り、sentence relevance を伝播させて、直接一致しない中間 entity まで活性化する。
+        - text: →
+      - generic [ref=e522]:
+        - generic [ref=e523]: "03"
+        - heading "Passage Ranking" [level=3] [ref=e524]
+        - paragraph [ref=e525]: 活性化 entity を種に Personalized PageRank を回し、グローバルに重要な passage を上位から返す。
+    - generic [ref=e526]:
+      - generic [ref=e527]:
+        - 'heading "Stage 1: Semantic Bridging" [level=3] [ref=e528]'
+        - paragraph [ref=e529]:
+          - text: 直接の entity match だけでは multi-hop の橋渡し entity を取りこぼします。 そこで query と sentence の意味類似度を使い、sentence-entity グラフ上で関連 entity を少しずつ広げます。 ただし無限に広がるとノイズが増えるので、閾値
+          - code [ref=e530]: δ
+          - text: による dynamic pruning で拡散を止めます。
+      - generic [ref=e531]:
+        - 'heading "Stage 2: Global Importance Aggregation" [level=3] [ref=e532]'
+        - paragraph [ref=e533]: 活性化された entity から見て、どの passage が全体として重要かを Personalized PageRank で評価します。 局所一致だけでなく、周辺の構造全体を見て rank するので、単純な dense retrieval より reasoning chain を拾いやすくなります。
+    - figure "論文のメイン図。Naive RAG、GraphRAG、LinearRAG の違いと、提案法の構造が視覚的に整理されています。" [ref=e534]:
+      - img "LinearRAG の全体図" [ref=e535]
+      - generic [ref=e536]: 論文のメイン図。Naive RAG、GraphRAG、LinearRAG の違いと、提案法の構造が視覚的に整理されています。
+    - generic [ref=e537]:
+      - generic [ref=e538]:
+        - heading "オンライン検索の実行シーケンス" [level=3] [ref=e539]
+        - generic [ref=e540]:
+          - generic [ref=e541]:
+            - generic [ref=e543]: "1"
+            - generic [ref=e544]:
+              - heading "質問を埋め込む" [level=3] [ref=e545]
+              - paragraph [ref=e546]:
+                - code [ref=e547]: retrieve()
+                - text: が質問ベクトルを生成。後続のsentence・passage類似度で共用する。
+          - generic [ref=e548]:
+            - generic [ref=e550]: "2"
+            - generic [ref=e551]:
+              - heading "Seed entityを決める" [level=3] [ref=e552]
+              - paragraph [ref=e553]:
+                - code [ref=e554]: question_ner()
+                - text: で質問entityを抽出し、entity embeddingとの内積が最大の候補へ対応づける。
+          - generic [ref=e555]:
+            - generic [ref=e557]: "3"
+            - generic [ref=e558]:
+              - heading "Sentenceを橋にentityを伝播" [level=3] [ref=e559]
+              - paragraph [ref=e560]:
+                - text: 各active entityにつながる文のうち、質問に近い上位
+                - code [ref=e561]: top_k_sentence
+                - text: 件だけを通す。
+          - generic [ref=e562]:
+            - generic [ref=e564]: "4"
+            - generic [ref=e565]:
+              - heading "Passage初期重みを作る" [level=3] [ref=e566]
+              - paragraph [ref=e567]: dense類似度とactive entityの出現ボーナスを合成し、PPRのreset vectorへ加える。
+          - generic [ref=e568]:
+            - generic [ref=e570]: "5"
+            - generic [ref=e571]:
+              - heading "PPRで上位passageを返す" [level=3] [ref=e572]
+              - paragraph [ref=e573]:
+                - code [ref=e574]: igraph.personalized_pagerank()
+                - text: のpassage部分だけを降順に並べ、上位k件を取得。
+      - generic [ref=e575]:
+        - heading "実装上のスコア分解" [level=3] [ref=e576]
+        - generic [ref=e577]:
+          - text: Entity propagation
+          - text: next_entity_score
+          - text: = current_entity_score
+          - text: × cosine(question, sentence)
+          - text: Passage reset weight
+          - text: passage_score
+          - text: = passage_ratio × normalized_DPR
+          - text: + log(1 + entity_bonus)
+          - text: entity_bonus
+          - text: = entity_score × log(1 + occurrences) / tier
+        - paragraph [ref=e578]:
+          - code [ref=e579]: tier
+          - text: が深いentityほど寄与を割り引き、同じentityがpassage内に複数回現れると対数的に加点します。 最後に
+          - code [ref=e580]: passage_node_weight
+          - text: を掛けて、entity重みと同じreset vectorへ載せます。
+    - generic [ref=e581]:
+      - generic [ref=e582]:
+        - generic [ref=e583]: "default: BFS iteration"
+        - heading "逐次探索版" [level=3] [ref=e584]
+        - list [ref=e585]:
+          - listitem [ref=e586]: active entityごとに未使用sentenceを取得
+          - listitem [ref=e587]: 質問類似度の高いsentenceだけを選択
+          - listitem [ref=e588]: 閾値未満のentityをその場で枝刈り
+          - listitem [ref=e589]: 処理が追いやすく、CPUでも動作可能
+      - generic [ref=e590]:
+        - generic [ref=e591]: "--use_vectorized_retrieval"
+        - heading "疎行列・GPU版" [level=3] [ref=e592]
+        - list [ref=e593]:
+          - listitem [ref=e594]: entity→sentence、sentence→entityをPyTorch COO疎行列化
+          - listitem [ref=e595]: 全sentence類似度を先に一括計算
+          - listitem [ref=e596]: 重複排除、entity単位top-k、閾値処理はBFS版に合わせる
+          - listitem [ref=e597]: 大規模データで並列計算を活かしやすい
+  - generic [ref=e598]:
+    - heading "7. Multi-hop検索の要点を短く振り返る" [level=2] [ref=e599]
+    - paragraph [ref=e600]: 以下は仕組みを理解するための簡略例です。実際の検索ではentity名・文・passageが埋め込みとハッシュIDで管理されます。
+    - generic [ref=e602]:
+      - generic [ref=e603]:
+        - generic [ref=e604]: Question / seed
+        - strong [ref=e605]: 「LinearRAGを提案した研究者の所属機関は？」
+        - text: 質問NERが研究者名をseed entityとして認識したと仮定。
+      - generic [ref=e606]:
+        - text: 文類似度
+        - text: →
+      - generic [ref=e607]:
+        - generic [ref=e608]: Sentence bridge
+        - strong [ref=e609]: 「A氏らはLinearRAGを提案した」
+        - text: seed entityを含み、質問との意味類似度が高い文が選ばれる。
+      - generic [ref=e610]:
+        - text: mention
+        - text: →
+      - generic [ref=e611]:
+        - generic [ref=e612]: Activated entity
+        - strong [ref=e613]: 大学・研究機関名
+        - text: 同じ文または次の関連文に現れるentityへスコアが伝播する。
+      - generic [ref=e614]:
+        - text: PPR
+        - text: →
+      - generic [ref=e615]:
+        - generic [ref=e616]: Retrieved passage
+        - strong [ref=e617]: 著者・所属を記載した原文passage
+        - text: dense一致とentity構造の両方で高得点になり、回答根拠としてLLMへ渡る。
+    - generic [ref=e618]:
+      - generic [ref=e619]:
+        - heading "なぜdense検索だけでは難しいか" [level=3] [ref=e620]
+        - paragraph [ref=e621]: 質問と所属passageが語彙的に遠い場合、直接のベクトル類似度だけでは順位が下がりやすい。
+      - generic [ref=e622]:
+        - heading "なぜrelation tripleが不要か" [level=3] [ref=e623]
+        - paragraph [ref=e624]: 「提案した」「所属する」という意味は原文sentenceに残し、entity共起と文類似度で橋を選べる。
+      - generic [ref=e625]:
+        - heading "なぜPPRを最後に使うか" [level=3] [ref=e626]
+        - paragraph [ref=e627]: 単一の局所一致ではなく、複数のactive entityから支持されるpassageを全体構造で上げられる。
+    - generic [ref=e628]:
+      - generic [ref=e629]: "0"
+      - paragraph [ref=e630]:
+        - text: 質問からentityを1つも抽出できない場合、実装はグラフ探索を無理に行いません。
+        - code [ref=e631]: dense_passage_retrieval()
+        - text: にフォールバックし、通常のベクトル検索として上位passageを返します。
+  - generic [ref=e632]:
+    - heading "8. 何が良くなったのか" [level=2] [ref=e633]
+    - paragraph [ref=e634]:
+      - text: 著者らは、LinearRAG の価値を
+      - strong [ref=e635]: 精度
+      - text: と
+      - strong [ref=e636]: 効率
+      - text: の両方で示しています。 重要なのは、速いだけでも、精度が高いだけでもなく、
+      - strong [ref=e637]: 両方をかなり良い水準で両立
+      - text: している点です。
+    - generic [ref=e638]:
+      - generic [ref=e639]:
+        - generic [ref=e640]: 2Wiki GPT-Acc.
+        - generic [ref=e641]: "63.70"
+        - generic [ref=e642]: 論文中で主要な改善点として強調
+      - generic [ref=e643]:
+        - generic [ref=e644]: Indexing Time
+        - generic [ref=e645]: 249.78s
+        - generic [ref=e646]: 比較対象よりかなり短い
+      - generic [ref=e647]:
+        - generic [ref=e648]: Prompt Tokens
+        - generic [ref=e649]: "0"
+        - generic [ref=e650]: indexing / retrieval とも LLM 呼び出しなし
+      - generic [ref=e651]:
+        - generic [ref=e652]: Overall Accuracy
+        - generic [ref=e653]: "66.95"
+        - generic [ref=e654]: 表 2 の平均精度で最良
+    - generic [ref=e655]:
+      - generic [ref=e656]:
+        - generic [ref=e657]: Method
+        - generic [ref=e658]: Indexing
+        - generic [ref=e659]: Retrieval
+        - generic [ref=e660]: LLM Cost
+        - generic [ref=e661]: Accuracy
+      - generic [ref=e662]:
+        - generic [ref=e663]: LightRAG
+        - generic [ref=e664]: 4933.22s
+        - generic [ref=e665]: 10.963s
+        - generic [ref=e666]: 非常に大きい
+        - generic [ref=e667]: "47.10"
+      - generic [ref=e668]:
+        - generic [ref=e669]: HippoRAG
+        - generic [ref=e670]: 936.00s
+        - generic [ref=e671]: 1.461s
+        - generic [ref=e672]: あり
+        - generic [ref=e673]: "63.00"
+      - generic [ref=e674]:
+        - generic [ref=e675]: GFM-RAG
+        - generic [ref=e676]: 1202.77s
+        - generic [ref=e677]: 1.211s
+        - generic [ref=e678]: あり
+        - generic [ref=e679]: "63.20"
+      - generic [ref=e680]:
+        - generic [ref=e681]: LinearRAG
+        - generic [ref=e682]: 249.78s
+        - generic [ref=e683]: 0.093s
+        - generic [ref=e684]: 0 / 0
+        - generic [ref=e685]: "66.95"
+    - generic [ref=e686]:
+      - figure "エンドツーエンドの generation performance。複数データセットで LinearRAG が上位に位置します。" [ref=e687]:
+        - img "性能比較図" [ref=e688]
+        - generic [ref=e689]: エンドツーエンドの generation performance。複数データセットで LinearRAG が上位に位置します。
+      - figure "効率比較。グラフを使いながらも、構築と検索の両方で軽量に寄せているのが特徴です。" [ref=e690]:
+        - img "効率比較図" [ref=e691]
+        - generic [ref=e692]: 効率比較。グラフを使いながらも、構築と検索の両方で軽量に寄せているのが特徴です。
+    - generic [ref=e693]:
+      - generic [ref=e694]:
+        - heading "精度面の意味" [level=3] [ref=e695]
+        - paragraph [ref=e696]: GraphRAG の「広く拾える」強みを残しつつ、relation noise を減らして relevance を改善した。
+      - generic [ref=e697]:
+        - heading "効率面の意味" [level=3] [ref=e698]
+        - paragraph [ref=e699]: relation extraction や graph summarization を避けたことで、indexing の重さを根本から削った。
+      - generic [ref=e700]:
+        - heading "実運用面の意味" [level=3] [ref=e701]
+        - paragraph [ref=e702]: 大量コーパスや更新頻度の高いコーパスでも、コストを抑えて GraphRAG 的な検索を回しやすい。
+  - generic [ref=e703]:
+    - heading "9. 設計上の強みと、読むべき制約" [level=2] [ref=e704]
+    - paragraph [ref=e705]: 「論文が主張する性質」と「このコードで確認できる挙動」を分けて整理します。
+    - generic [ref=e706]:
+      - generic [ref=e707]: 論文
+      - generic [ref=e708]: 実装
+      - generic [ref=e709]: 両方で確認
+    - generic [ref=e710]:
+      - generic [ref=e711]:
+        - text: 両方で確認
+        - heading "IndexingでLLMを呼ばない" [level=3] [ref=e712]
+        - paragraph [ref=e713]: NERとembeddingだけで索引を作る。LLMは取得passageから回答を生成する最終段階でのみ使われる。
+      - generic [ref=e714]:
+        - text: 両方で確認
+        - heading "Relation labelを保存しない" [level=3] [ref=e715]
+        - paragraph [ref=e716]: 接続はentityの出現関係が中心。自然言語の関係意味はsentence・passage本文に保持する。
+      - generic [ref=e717]:
+        - text: 実装固有
+        - heading "隣接passage辺を追加する" [level=3] [ref=e718]
+        - paragraph [ref=e719]:
+          - code [ref=e720]: 0:...
+          - text: のような連番付きpassageを順番に接続し、文書の局所的な連続性もPPRへ入れる。
+      - generic [ref=e721]:
+        - text: 実装固有
+        - heading "属性質問向け補助boost" [level=3] [ref=e722]
+        - paragraph [ref=e723]: 設定を有効化すると、where / born / founded等の語が質問とpassageで重なる場合に追加点を与えられる。
+    - generic [ref=e724]:
+      - generic [ref=e725]:
+        - strong [ref=e726]: NER品質への依存
+        - text: entityを落とすとグラフ経路自体が作れない。表記揺れも埋め込み対応だけで完全には解決しない。
+      - generic [ref=e727]:
+        - strong [ref=e728]: Sentence共起はrelationの正しさを保証しない
+        - text: 同じ文に現れるだけで因果・所属・否定などの関係種別は区別しない。最終解釈は取得本文とLLMに委ねる。
+      - generic [ref=e729]:
+        - strong [ref=e730]: パラメータが探索の広さを左右する
+        - code [ref=e731]: iteration_threshold
+        - text: 、
+        - code [ref=e732]: max_iterations
+        - text: 、
+        - code [ref=e733]: top_k_sentence
+        - text: が小さすぎても大きすぎても、recallとnoiseのバランスが崩れる。
+      - generic [ref=e734]:
+        - strong [ref=e735]: 失敗時の退路が単純
+        - text: seed entityが得られなければdense retrievalへ戻るため、グラフ検索だけに全面依存しない。
+  - generic [ref=e736]:
+    - heading "10. 初めての人向けの持ち帰り" [level=2] [ref=e737]
+    - paragraph [ref=e738]:
+      - text: LinearRAG は「GraphRAG をもっと賢くした」論文というより、
+      - strong [ref=e739]: GraphRAG から壊れやすい部分だけを削って、残すべき構造だけを残した
+      - text: 論文です。
+    - generic [ref=e740]:
+      - generic [ref=e741]:
+        - heading "向いているケース" [level=3] [ref=e742]
+        - list [ref=e743]:
+          - listitem [ref=e744]: 複数文書にまたがる multi-hop 質問を扱いたい
+          - listitem [ref=e745]: GraphRAG は使いたいが relation extraction の品質が信用しにくい
+          - listitem [ref=e746]: LLM トークンコストを indexing に使いたくない
+          - listitem [ref=e747]: 大きいコーパスを継続的に更新したい
+      - generic [ref=e748]:
+        - heading "注意して読むべき点" [level=3] [ref=e749]
+        - list [ref=e750]:
+          - listitem [ref=e751]: relation label 自体が必要な下流タスクには別評価が必要
+          - listitem [ref=e752]: entity extraction と sentence embedding の品質には依存する
+          - listitem [ref=e753]: 「relation を作らない」設計が常に最適とは限らない
+          - listitem [ref=e754]: ただし GraphRAG の現実的な代替案としてはかなり筋が良い
+    - generic [ref=e755]:
+      - text: 初学者向けに一言で言えば、
+      - strong [ref=e756]: 「複雑な知識グラフを無理に作らず、原文を活かしたまま、必要なつながりだけを検索時に浮かび上がらせる」
+      - text: のが LinearRAG です。
+    - paragraph [ref=e757]:
+      - text: "参照:"
+      - link "元論文 PDF" [ref=e758] [cursor=pointer]:
+        - /url: ./2510.10114v4.pdf
+      - text: /
+      - link "日本語詳細要約" [ref=e759] [cursor=pointer]:
+        - /url: ./2510.10114v4_ja_summary.md

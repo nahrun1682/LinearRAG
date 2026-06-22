@@ -1202,11 +1202,12 @@
         <a href="#idea">2. コアアイデア</a>
         <a href="#implementation">3. 実装設計</a>
         <a href="#walkthrough">4. 構築/RAG具体例</a>
-        <a href="#pipeline">5. 検索フロー</a>
-        <a href="#example">6. Multi-hop</a>
-        <a href="#results">7. 結果</a>
-        <a href="#limits">8. 制約</a>
-        <a href="#takeaway">9. 使いどころ</a>
+        <a href="#livegraph">5. 実データのグラフ</a>
+        <a href="#pipeline">6. 検索フロー</a>
+        <a href="#example">7. Multi-hop</a>
+        <a href="#results">8. 結果</a>
+        <a href="#limits">9. 制約</a>
+        <a href="#takeaway">10. 使いどころ</a>
       </nav>
     </header>
 
@@ -1718,8 +1719,191 @@
       </div>
     </section>
 
+    <section id="livegraph" class="section">
+      <h2>5. 実データで構築されたグラフをHTMLで見る</h2>
+      <p class="section-intro">
+        ここまでは概念図と架空例でした。この節では、実際に <code>2wikimultihop</code> の一部（<code>test10</code>: 質問10件・チャンク658件）で
+        <code>index()</code> を実行して<strong>本当に構築されたグラフ</strong>を、インタラクティブHTMLで見ながら検索の流れをたどります。
+        図は <code>import/test10/LinearRAG.graphml</code> から <code>tools/visualize_graph.py</code> が生成したもので、
+        4万ノードのうち「Lothair II」周辺だけを抜き出しています。
+      </p>
+
+      <div class="metric-grid">
+        <div class="metric">
+          <span class="label">総ノード数</span>
+          <span class="value">41,901</span>
+          <span class="sub">entity + passage の2種</span>
+        </div>
+        <div class="metric">
+          <span class="label">passage ノード</span>
+          <span class="value">658</span>
+          <span class="sub">原文チャンク</span>
+        </div>
+        <div class="metric">
+          <span class="label">entity ノード</span>
+          <span class="value">41,243</span>
+          <span class="sub">spaCy NER で抽出</span>
+        </div>
+        <div class="metric">
+          <span class="label">エッジ数</span>
+          <span class="value">69,707</span>
+          <span class="sub">passage↔entity / 隣接passage</span>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:18px;">
+        <div class="callout-mark">i</div>
+        <p>
+          保存済みの <code>LinearRAG.graphml</code> には <strong>entity と passage しか入っていません</strong>。
+          sentence は別ファイル（<code>sentence_embedding.parquet</code> と <code>ner_results.json</code>）に保持され、
+          検索時に「entity→文→entity」を<strong>埋め込み類似度で動的にたどる</strong>ために使われます。
+          下の①の図は、その動的な橋渡しを理解しやすいよう、文ノードをあえて重ねて描いたものです。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top:18px;">
+        <h3>HTML内の色の意味（pyvis 描画）</h3>
+        <div class="legend" style="margin-top:10px;">
+          <span style="background:#4C8BF5;color:#fff;">■ passage（原文チャンク）</span>
+          <span style="background:#E0457B;color:#fff;">● entity（複数passageを橋渡し）</span>
+          <span style="background:#F5A623;color:#3a2400;">● entity（単独出現）</span>
+          <span style="background:#9B59B6;color:#fff;">◆ sentence（文）</span>
+          <span style="background:#2ECC71;color:#0a3d1e;">● seed（探索の起点 entity）</span>
+        </div>
+        <p class="footer-note" style="margin-top:10px;">
+          エッジの色: <strong>灰</strong>=「entity がその passage に出現」、
+          <strong>黄</strong>=「entity がその sentence に出現」、
+          <strong>緑の破線</strong>=「隣接 passage（元コーパスで連続するチャンク）」。
+        </p>
+      </div>
+
+      <h3 style="margin-top:24px;">① 文レイヤー入り：entity ↔ sentence ↔ entity の橋渡し</h3>
+      <p class="section-intro">
+        起点（緑）は質問「<strong>When did Lothair II's mother die?</strong>」から取った <code>lothair ii</code>。
+        紫の菱形が文で、黄色い線で複数 entity につながります。
+        <strong>1つの文が複数 entity を結び、その entity がまた別の文へ</strong>……という連鎖が、relation ラベルなしの multi-hop の正体です。
+      </p>
+      <div style="border:1px solid rgba(24,34,44,0.12);border-radius:18px;overflow:hidden;background:#1e1e1e;box-shadow:var(--shadow);">
+        <iframe src="../../import/test10/graph_view_sentences.html" loading="lazy"
+                title="LinearRAG sentence-layer subgraph (Lothair II)"
+                style="width:100%;height:560px;border:0;display:block;"></iframe>
+      </div>
+      <p class="footer-note">
+        表示されない場合は <a href="../../import/test10/graph_view_sentences.html" target="_blank" rel="noopener">別タブで開く</a>。
+        ノードはドラッグ/ズームでき、ホバーで全文が出ます。
+      </p>
+
+      <h3 style="margin-top:24px;">② entity ↔ passage：PPR が実際に走る本体グラフ</h3>
+      <p class="section-intro">
+        こちらは保存済み graphml そのままの構造（青四角=passage、ピンク=橋渡し entity、緑の破線=隣接passage）。
+        ある entity が複数の passage に出現することで、離れた passage 同士が間接的につながっているのが見えます。
+        ここに後述の重みを載せて Personalized PageRank を回します。
+      </p>
+      <div style="border:1px solid rgba(24,34,44,0.12);border-radius:18px;overflow:hidden;background:#1e1e1e;box-shadow:var(--shadow);">
+        <iframe src="../../import/test10/graph_view_auto.html" loading="lazy"
+                title="LinearRAG entity-passage subgraph"
+                style="width:100%;height:520px;border:0;display:block;"></iframe>
+      </div>
+      <p class="footer-note">
+        別タブ: <a href="../../import/test10/graph_view_auto.html" target="_blank" rel="noopener">entity↔passage 図</a> /
+        <a href="../../import/test10/graph_view.html" target="_blank" rel="noopener">最小構成図（Lothair II 16ノード）</a>。
+        起点を変えるには <code>python tools/visualize_graph.py --seed "..." --with-sentences</code>。
+      </p>
+
+      <h3 style="margin-top:24px;">このグラフ上で質問に答える流れ</h3>
+      <p class="section-intro">
+        上の①②の図を見ながら、「<strong>When did Lothair II's mother die?</strong>」が回答になるまでを実コードに沿って追います。
+      </p>
+      <div class="grid-2">
+        <div class="card">
+          <div class="sequence">
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">1</span></div>
+              <div class="sequence-content">
+                <h3>seed entity を取る <span class="source-tag">get_seed_entities()</span></h3>
+                <p>質問NERが <code>lothair ii</code> を抽出 → embedding でグラフ内の最も近い entity に対応づけ（①の<strong>緑ノード</strong>）。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">2</span></div>
+              <div class="sequence-content">
+                <h3>文を橋に選ぶ <span class="source-tag">calculate_entity_scores()</span></h3>
+                <p><code>lothair ii</code> を含む文（①の<strong>紫の菱形</strong>）を質問と類似度比較し、上位 <code>top_k_sentence</code> 件だけ通す。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">3</span></div>
+              <div class="sequence-content">
+                <h3>次の entity を活性化</h3>
+                <p>選ばれた文に共起する別 entity（例: <code>lotharingia</code> や日付 <code>11 november 875</code> など、①の黄色線の先）へ <code>entity_score × 文類似度</code> を伝播。閾値未満は枝刈り。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">4</span></div>
+              <div class="sequence-content">
+                <h3>passage に初期重み <span class="source-tag">calculate_passage_scores()</span></h3>
+                <p>質問との dense 類似度 + 「活性 entity が passage に何回出るか」のボーナス（②の<strong>青四角</strong>に重みが乗る）。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">5</span></div>
+              <div class="sequence-content">
+                <h3>PPR で順位付け <span class="source-tag">run_ppr()</span></h3>
+                <p>②のグラフ上で Personalized PageRank を実行し、スコアを構造伝播 → passage を降順に並べて上位 <code>retrieval_top_k</code> 件。</p>
+              </div>
+            </div>
+            <div class="sequence-row">
+              <div class="sequence-rail"><span class="sequence-dot">6</span></div>
+              <div class="sequence-content">
+                <h3>LLM が回答 <span class="source-tag">qa()</span></h3>
+                <p>上位 passage を gpt-4o-mini に渡し、<code>Thought: … Answer: …</code> 形式で母の死亡年を生成。<code>Answer:</code> 以降が <code>predictions.json</code> に入る。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>図と仕組みの対応</h3>
+          <div class="table-like">
+            <div class="mapping-row">
+              <span class="map-key">緑ノード</span><span class="map-arrow">=</span>
+              <span class="map-values">seed entity（質問から特定）</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">黄エッジ</span><span class="map-arrow">=</span>
+              <span class="map-values">entity↔sentence。multi-hop が伝わる経路</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">ピンク</span><span class="map-arrow">=</span>
+              <span class="map-values">複数 passage を橋渡しする entity</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">灰エッジ</span><span class="map-arrow">=</span>
+              <span class="map-values">entity↔passage。passage 採点に効く</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">青四角</span><span class="map-arrow">=</span>
+              <span class="map-values">passage。PPR で最終順位が決まる</span>
+            </div>
+            <div class="mapping-row">
+              <span class="map-key">緑破線</span><span class="map-arrow">=</span>
+              <span class="map-values">隣接 passage。局所的連続性を伝播</span>
+            </div>
+          </div>
+          <p class="footer-note" style="margin-top:12px;">
+            この test10 実行では LLM Accuracy 0.70 / Contain Accuracy 0.80（10問）でした。
+          </p>
+        </div>
+      </div>
+
+      <div class="quote-box">
+        要点：グラフは答えを作りません。<strong>「答えに必要な原文 passage を揃える検索器」</strong>として働き、
+        最終的な関係の解釈（「mother」「died」の対応づけ）は原文と LLM に委ねます。
+        だから relation ラベルを索引時に作らなくても multi-hop に答えられます。
+      </div>
+    </section>
+
     <section id="pipeline" class="section">
-      <h2>5. 質問から回答まで、どう動くのか</h2>
+      <h2>6. 質問から回答まで、どう動くのか</h2>
       <p class="section-intro">
         パイプラインは大きく <strong>オフライン構築</strong> と <strong>オンライン検索</strong> に分かれます。
         オフラインでは軽く索引を作り、オンラインでは 2 段階で relevant context を掘り当てます。
@@ -1854,7 +2038,7 @@
     </section>
 
     <section id="example" class="section">
-      <h2>6. Multi-hop検索の要点を短く振り返る</h2>
+      <h2>7. Multi-hop検索の要点を短く振り返る</h2>
       <p class="section-intro">
         以下は仕組みを理解するための簡略例です。実際の検索ではentity名・文・passageが埋め込みとハッシュIDで管理されます。
       </p>
@@ -1912,7 +2096,7 @@
     </section>
 
     <section id="results" class="section">
-      <h2>7. 何が良くなったのか</h2>
+      <h2>8. 何が良くなったのか</h2>
       <p class="section-intro">
         著者らは、LinearRAG の価値を <strong>精度</strong> と <strong>効率</strong> の両方で示しています。
         重要なのは、速いだけでも、精度が高いだけでもなく、<strong>両方をかなり良い水準で両立</strong>している点です。
@@ -2007,7 +2191,7 @@
     </section>
 
     <section id="limits" class="section">
-      <h2>8. 設計上の強みと、読むべき制約</h2>
+      <h2>9. 設計上の強みと、読むべき制約</h2>
       <p class="section-intro">
         「論文が主張する性質」と「このコードで確認できる挙動」を分けて整理します。
       </p>
@@ -2062,7 +2246,7 @@
     </section>
 
     <section id="takeaway" class="section">
-      <h2>9. 初めての人向けの持ち帰り</h2>
+      <h2>10. 初めての人向けの持ち帰り</h2>
       <p class="section-intro">
         LinearRAG は「GraphRAG をもっと賢くした」論文というより、
         <strong>GraphRAG から壊れやすい部分だけを削って、残すべき構造だけを残した</strong>論文です。

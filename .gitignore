@@ -3,7 +3,11 @@ results/
 .env
 .venv
 dataset/
-import/
+# import/ 配下は .html のみ追跡、それ以外(大容量の埋め込みデータ等)は除外
+import/*
+!import/*/
+import/*/*
+!import/*/*.html
 model/
 scripts/
 

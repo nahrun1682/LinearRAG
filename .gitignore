@@ -9,6 +9,10 @@ scripts/
 
 .DS_Store
 
+# Windows "mark of the web" metadata files (break git clone on PowerShell)
+*:Zone.Identifier
+*Zone.Identifier
+
 # all pycache files, including those in subdirectories
 __pycache__/
 */__pycache__/
